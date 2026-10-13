@@ -26,22 +26,6 @@ Una vez habilitadas las características necesarias, reiniciar Windows para que 
 
 > **Nota:** la contraseña de Linux puede no mostrarse mientras se escribe en la terminal. Es un comportamiento normal.
 
-## Comprobación de la instalación
-
-Tras completar la configuración inicial, abrir Ubuntu y comprobar que se puede acceder a la terminal.
-
-Se puede consultar la información de la distribución con el siguiente comando:
-
-```bash
-lsb_release -a
-```
-
-También se puede comprobar la versión del kernel de Linux con:
-
-```bash
-uname -r
-```
-
 ## Evidencia de la instalación
 
 <img width="1913" height="489" alt="image" src="https://github.com/user-attachments/assets/6e18cc71-1dfb-4979-a2ac-2c82e865ebc1" />
