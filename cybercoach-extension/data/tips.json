@@ -1,0 +1,14 @@
+[
+  { "title": "Pasa el ratón antes de hacer clic", "text": "Antes de pulsar un enlace de un correo, pasa el ratón por encima y comprueba el dominio real." },
+  { "title": "Bloquea tu pantalla", "text": "Windows + L (o Ctrl + Cmd + Q en Mac) cada vez que te levantes. Tarda un segundo." },
+  { "title": "Frases, no palabras", "text": "Una frase de 4 palabras al azar es más segura y más fácil de recordar que P@ssw0rd!." },
+  { "title": "MFA: nunca aceptes lo que no pediste", "text": "Si te llega una notificación de inicio de sesión que no has pedido, recházala y avisa a seguridad." },
+  { "title": "Urgencia = alarma", "text": "\"Hazlo ya\" y \"no se lo digas a nadie\" son las frases favoritas de los estafadores. Verifica por otro canal." },
+  { "title": "El candado no basta", "text": "HTTPS solo significa que la conexión va cifrada. Las webs falsas también lo tienen: mira el dominio." },
+  { "title": "Actualiza hoy", "text": "Las actualizaciones corrigen fallos que los atacantes ya conocen. No las pospongas." },
+  { "title": "USB desconocido = no", "text": "Si encuentras un USB, entrégalo a IT sin conectarlo." },
+  { "title": "Cuidado con la IA pública", "text": "No pegues datos de clientes ni información confidencial en herramientas de IA no aprobadas." },
+  { "title": "CCO en correos masivos", "text": "Al escribir a muchos destinatarios externos, usa CCO para no exponer sus direcciones." },
+  { "title": "Wi-Fi pública: con VPN", "text": "En cafeterías, hoteles o aeropuertos, conecta la VPN corporativa o usa los datos del móvil." },
+  { "title": "Reportar suma", "text": "¿Algo sospechoso? Pulsa el botón 🎣 de CyberCoach. Un aviso a tiempo protege a toda la empresa." }
+]

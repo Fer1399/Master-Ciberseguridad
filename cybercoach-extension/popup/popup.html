@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>CyberCoach</title>
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <img src="../assets/icons/icon48.png" alt="" width="32" height="32">
+    <div>
+      <h1>CyberCoach</h1>
+      <p id="company" class="muted"></p>
+    </div>
+  </header>
+
+  <section class="card level">
+    <div class="level-row">
+      <span id="level-icon" class="level-icon">🌱</span>
+      <div class="grow">
+        <strong id="level-name">Novato</strong>
+        <div class="muted small"><span id="points">0</span> puntos · <span id="next"></span></div>
+      </div>
+      <div class="streak" title="Días seguidos aprendiendo">🔥 <span id="streak">0</span></div>
+    </div>
+    <div class="bar"><div id="level-bar" class="bar-fill"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Tu itinerario</h2>
+      <span id="overall" class="pill"></span>
+    </div>
+    <ul id="modules" class="modules"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Insignias</h2>
+    <div id="badges" class="badges"></div>
+  </section>
+
+  <button id="report" class="btn danger full">🎣 Reportar esta página como phishing</button>
+  <p id="report-msg" class="muted small center" hidden></p>
+
+  <footer class="foot">
+    <a href="#" id="open-course">Abrir formación</a>
+    <a href="#" id="open-options">Ajustes</a>
+  </footer>
+
+  <script src="../shared/storage.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

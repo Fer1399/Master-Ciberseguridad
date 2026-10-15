@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "CyberCoach – Formación en Ciberseguridad",
+  "short_name": "CyberCoach",
+  "version": "1.0.0",
+  "description": "Formación en ciberseguridad para empleados: micro-cursos, quizzes, avisos en el momento de riesgo y reporte de phishing.",
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "32": "assets/icons/icon32.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
+  "action": {
+    "default_title": "CyberCoach",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "32": "assets/icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "options_page": "options/options.html",
+  "permissions": ["storage", "alarms", "notifications", "downloads", "activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["shared/detector-rules.js", "content/detector.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "storage": {
+    "managed_schema": "managed_schema.json"
+  }
+}
