@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CyberCoach · Ajustes</title>
+  <link rel="icon" href="../assets/icons/icon32.png">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <style>
+    .wrap { max-width: 640px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
+    label { display: block; font-weight: 600; margin-bottom: 4px; }
+    input[type=text], input[type=email], textarea { width: 100%; font: 14px var(--font); padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+    textarea { min-height: 90px; resize: vertical; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+    .lock { background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>⚙️ Ajustes de CyberCoach</h1>
+    <p id="lock" class="lock" hidden>🔒 Parte de esta configuración la gestiona tu empresa y no se puede cambiar.</p>
+
+    <form id="form" class="card stack" style="display:flex;flex-direction:column;gap:14px">
+      <div class="field">
+        <label for="companyName">Nombre de la empresa</label>
+        <input type="text" id="companyName">
+      </div>
+      <div class="field">
+        <label for="corporateDomains">Dominios corporativos legítimos</label>
+        <textarea id="corporateDomains" placeholder="miempresa.com&#10;miempresa.es"></textarea>
+        <span class="muted small">Uno por línea. Sirven para detectar webs que imitan a tu empresa.</span>
+      </div>
+      <div class="field">
+        <label for="reportEmail">Email del equipo de seguridad (reportes de phishing)</label>
+        <input type="email" id="reportEmail">
+      </div>
+      <label class="check"><input type="checkbox" id="detectorEnabled"> Activar avisos contextuales (webs y descargas sospechosas)</label>
+      <div class="row"><button class="btn" type="submit">Guardar</button><span id="saved" class="muted" hidden>✔ Guardado</span></div>
+    </form>
+
+    <div class="card">
+      <h2 style="font-size:16px;margin-bottom:8px">Datos y privacidad</h2>
+      <p class="muted small">CyberCoach analiza las páginas <strong>en tu propio navegador</strong>. No guarda ni envía tu historial ni tus contraseñas.
+        Tu progreso se guarda solo en este equipo.</p>
+      <div class="row">
+        <button class="btn ghost" id="export">Exportar mi progreso (JSON)</button>
+        <button class="btn ghost" id="reset">Reiniciar progreso</button>
+      </div>
+    </div>
+  </div>
+  <script src="../shared/storage.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
