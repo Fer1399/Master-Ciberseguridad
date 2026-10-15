@@ -20,7 +20,7 @@ Esta versión es el **MVP sin backend**: todo funciona en local y no hace falta 
 1. Descomprime el zip.
 2. Abre `chrome://extensions` en Chrome.
 3. Activa **Modo de desarrollador** (arriba a la derecha).
-4. Pulsa **Cargar descomprimida** y selecciona la carpeta `cybercoach-extension`.
+4. Pulsa **Cargar descomprimida** y selecciona la carpeta `ExtensionChrome`.
 5. Se abrirá la página de bienvenida. Ve a **Ajustes** (icono de la extensión → Ajustes) y escribe tus dominios corporativos y el email de seguridad.
 
 ## Despliegue en la empresa
@@ -58,7 +58,7 @@ En Windows (registro): `HKLM\Software\Policies\Google\Chrome\3rdparty\extensions
 ## Estructura
 
 ```
-cybercoach-extension/
+ExtensionChrome/
 ├── manifest.json            Manifest V3
 ├── managed_schema.json      Esquema de la política empresarial
 ├── background/service-worker.js   Mensajes, píldora semanal, avisos de descarga, reporte
