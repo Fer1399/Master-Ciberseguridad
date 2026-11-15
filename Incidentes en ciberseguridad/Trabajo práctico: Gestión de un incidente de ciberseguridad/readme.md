@@ -1,4 +1,3 @@
-
 # Gestión de un incidente de ciberseguridad
 ### Caso práctico: phishing, intrusión y respuesta en Nexora S.L.
 
@@ -60,7 +59,7 @@ Durante el montaje surgieron varias incidencias que se resolvieron y que convien
 
 ---
 
-## 1. Prevención y concienciación (15%)
+## 1. Prevención y concienciación
 
 La mejor defensa frente a un incidente es evitar que ocurra. Este primer apartado identifica las amenazas a las que se expone Nexora S.L. y define las medidas de prevención y concienciación que reducen el riesgo.
 
@@ -127,7 +126,7 @@ La criptografía sostiene buena parte de las medidas de seguridad y, en este tra
 
 ---
 
-## 2. Detección y auditoría (20%)
+## 2. Detección y auditoría
 
 Detectar a tiempo es lo que separa un susto de un desastre. En este apartado se clasifica el incidente, se identifican los sistemas afectados y se despliega la infraestructura de detección que permitirá, más adelante, ver el ataque en tiempo real.
 
@@ -193,7 +192,7 @@ Toda la información anterior se consolida en una ficha que acompaña al inciden
 
 ---
 
-## 3. Investigación y análisis (20%)
+## 3. Investigación y análisis
 
 Este apartado es el núcleo práctico del trabajo: se reproduce el ataque completo paso a paso y, acto seguido, se investiga como lo haría un analista, preservando las evidencias y apoyándose en scripts propios.
 
@@ -300,7 +299,7 @@ El resultado fueron **20 alertas de reconocimiento** (regla 100200) y **3 alerta
 
 ---
 
-## 4. Respuesta y recuperación (20%)
+## 4. Respuesta y recuperación
 
 Confirmado el incidente, el objetivo es **contener, erradicar y recuperar** con el menor daño posible y sin destruir las evidencias. El procedimiento sigue un orden deliberado:
 
@@ -321,7 +320,7 @@ Más allá de la respuesta inmediata, el caso se enmarca en la **ciberresilienci
 
 ---
 
-## 5. Notificación y organismos de respuesta (15%)
+## 5. Notificación y organismos de respuesta
 
 Un incidente con datos personales no termina en lo técnico: conlleva obligaciones de comunicación. En el plano interno, se traslada el incidente a la dirección y se avisa a los empleados con un mensaje claro y sin alarmismo. Un **modelo de comunicación interna** para los empleados sería:
 
@@ -346,7 +345,7 @@ A escala internacional existen además referencias como **ENISA** (Agencia de la
 
 ---
 
-## 6. Simulación de la reunión del equipo de respuesta (10%)
+## 6. Simulación de la reunión del equipo de respuesta
 
 Para cerrar el ciclo se simula una **reunión de crisis del equipo de respuesta** (CSIRT interno), con roles definidos —coordinador del incidente, analista/forense, administrador de sistemas, responsable de protección de datos (DPO) y dirección—. La reunión aborda las cuatro circunstancias planteadas en el enunciado y justifica la decisión tomada en cada una:
 
