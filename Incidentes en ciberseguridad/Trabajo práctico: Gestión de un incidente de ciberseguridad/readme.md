@@ -296,7 +296,7 @@ El resultado fueron **20 alertas de reconocimiento** (regla 100200) y **3 alerta
 
 ### 3.6 Movimiento lateral con credenciales robadas
 
-El phishing no roba credenciales por capricho: el objetivo es **reutilizarlas para avanzar por el dominio**. Para demostrarlo, con el script `movimiento-lateral.ps1` uso las credenciales capturadas (`rrhh.ana` / `verano2027`) desde PC-RRHH-01 para **autenticarme contra el controlador de dominio DC-NEXORA** mediante `net use` sobre su recurso administrativo. No hace falta malware: basta una credencial válida y herramientas nativas de Windows.
+El phishing no roba credenciales por capricho: el objetivo es **reutilizarlas para avanzar por el dominio**. Para demostrarlo, con el script `movimiento-lateral.ps1` reutilizo las credenciales de dominio de la cuenta comprometida `rrhh.ana` desde PC-RRHH-01 para **autenticarme contra el controlador de dominio DC-NEXORA** mediante `net use` sobre su recurso administrativo. No hace falta malware: basta una credencial válida y herramientas nativas de Windows.
 
 Ese acceso deja huella en el DC como un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` y con origen la IP de la víctima (10.10.10.50). La **regla 100203** de Wazuh lo detecta y lo eleva a alerta de nivel 12, cerrando el escenario del enunciado (el atacante salta de la víctima al dominio). En términos de MITRE ATT&CK corresponde a **T1078** (*Valid Accounts*) y **T1021.002** (*SMB/Windows Admin Shares*).
 
@@ -722,7 +722,7 @@ Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -Foregroun
  Apartado : 3 - Investigacion / movimiento lateral
 
  Demuestra el MOVIMIENTO LATERAL con credenciales robadas: usa las
- credenciales capturadas en el phishing (rrhh.ana / verano2027) para
+ credenciales de dominio de la cuenta comprometida en el phishing (rrhh.ana) para
  autenticarse desde PC-RRHH-01 contra el controlador de dominio
  DC-NEXORA. Esto genera en el DC un inicio de sesion 4624 (tipo 3,
  por red) a nombre de rrhh.ana y con origen la IP de la victima, que
@@ -739,7 +739,7 @@ Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -Foregroun
 param(
     [string]$DC       = "10.10.10.10",
     [string]$Usuario  = "NEXORA\rrhh.ana",
-    [string]$Password = "verano2027"   # credencial ficticia robada en el phishing
+    [string]$Password = "Hola_1234"   # contrasena de dominio de la cuenta comprometida rrhh.ana
 )
 
 Write-Host "==== Movimiento lateral con credenciales robadas ====" -ForegroundColor Cyan
