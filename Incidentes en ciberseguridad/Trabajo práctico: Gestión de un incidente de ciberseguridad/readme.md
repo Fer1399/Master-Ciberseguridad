@@ -42,7 +42,7 @@ La red tiene cinco elementos: un controlador de dominio que gestiona la empresa,
 |--------|-------------------|----|---------------------|
 | DC-NEXORA | Windows Server 2025 | 10.10.10.10 | Controlador de dominio `nexora.lab` + DNS |
 | SRV-SIEM | Ubuntu Server 26.04 | 10.10.10.20 | SIEM (Wazuh): detección y análisis central |
-| PC-RRHH-01 | Windows 11 | 10.10.10.50 | Víctima: equipo de RR. HH. con Sysmon + agente Wazuh |
+| PC-RRHH-01 | Windows 11 | 10.10.10.50 | Víctima: equipo de RRHH con Sysmon + agente Wazuh |
 | KALI | Kali Linux | 10.10.10.100 | Atacante: GoPhish, MailHog y servidor C2 |
 | Gateway | — | 10.10.10.1 | Puerta de enlace de la Red NAT |
 
@@ -72,13 +72,13 @@ La concienciación la trabajo con **formación periódica** sobre cómo identifi
 
 El texto completo de la guía de buenas prácticas se incluye a continuación:
 
-Guía breve para todo el personal. Objetivo: reducir el riesgo de incidentes como el phishing de RR. HH. analizado en este trabajo.
+Guía breve para todo el personal. Objetivo: reducir el riesgo de incidentes como el phishing de RRHH analizado en este trabajo.
 
 ### 1. Correo y phishing (la puerta de entrada más común)
 - **Desconfía de la urgencia.** Mensajes que amenazan con "suspender tu cuenta" o ponen un plazo corto buscan que actúes sin pensar.
 - **Revisa el remitente y el enlace.** Pasa el ratón por encima del botón o enlace y comprueba la dirección real **antes** de pulsar. Si no coincide con el dominio oficial, no entres.
 - **Nunca introduzcas tu contraseña** a través de un enlace recibido por correo. Accede siempre escribiendo tú la dirección del portal.
-- **Ante la duda, reporta.** Reenvía el correo sospechoso al canal de RR. HH./IT y no lo borres hasta que lo revisen.
+- **Ante la duda, reporta.** Reenvía el correo sospechoso al canal de RRHH/IT y no lo borres hasta que lo revisen.
 
 ### 2. Contraseñas y acceso
 - Usa **contraseñas largas y únicas** para cada servicio; apóyate en un gestor de contraseñas.
@@ -96,7 +96,7 @@ Guía breve para todo el personal. Objetivo: reducir el riesgo de incidentes com
 - Si sospechas que ha habido un acceso o fuga de datos, **avisa de inmediato**: en una brecha, el tiempo cuenta (plazo legal de 72 h).
 
 ### 5. Si crees que has caído en un ataque
-1. **No lo ocultes.** Avisa cuanto antes a IT/RR. HH.
+1. **No lo ocultes.** Avisa cuanto antes a IT/RRHH
 2. Si has introducido tu contraseña en una web sospechosa, **cámbiala ya** en el portal real.
 3. Anota qué pasó (correo, hora, enlace) para ayudar a la investigación.
 4. No apagues el equipo si te lo pide el equipo técnico: puede necesitar la evidencia.
@@ -130,7 +130,7 @@ Clasifico el incidente como una **intrusión con acceso no autorizado** originad
 | Campo | Valor |
 |-------|-------|
 | Tipo | Intrusión vía phishing + malware (acceso no autorizado) |
-| Vector | Correo que suplanta a RR. HH. con un enlace malicioso |
+| Vector | Correo que suplanta a RRHH con un enlace malicioso |
 | Taxonomía | Intrusión + contenido abusivo (phishing), según ENISA/INCIBE |
 | Activos afectados | PC-RRHH-01, credenciales de usuario y datos de clientes |
 | Gravedad | **ALTA** por la sospecha de exfiltración de datos personales; pasaría a **CRÍTICA** si se confirma |
@@ -173,7 +173,7 @@ Consolido toda la información anterior en una ficha que acompaña al incidente 
 | Fecha y hora de detección | 14/11/2026, 23:37 (CET) |
 | Detectado por | Departamento de Informática (alertas de Wazuh) |
 | Tipo de incidente | Intrusión vía phishing con sospecha de exfiltración |
-| Vector de entrada | Correo que suplanta a RR. HH. con enlace malicioso |
+| Vector de entrada | Correo que suplanta a RRHH con enlace malicioso |
 | Activos afectados | PC-RRHH-01 (10.10.10.50), credenciales de `rrhh.ana`, CSV de clientes |
 | Indicadores (IOC) | IP del C2 10.10.10.100; portal falso; hashes recogidos en `iocs.csv` |
 | Gravedad | ALTA (pasa a CRÍTICA si se confirma la exfiltración) |
@@ -191,7 +191,7 @@ Este es el núcleo práctico del trabajo: reproduzco el ataque completo paso a p
 
 ### 3.1 Reproducción del ataque (emulación de adversario)
 
-Reproduzco el ataque en dos fases encadenadas. Primero monto una campaña de **phishing** con GoPhish y MailHog: un correo que suplanta a RR. HH. lleva a la víctima a un portal falso donde entrega sus credenciales. Después simulo con PowerShell (`emular-ataque.ps1`) la fase de **ejecución y post-explotación**: reconocimiento del sistema, acceso al CSV de clientes, comunicación periódica con el C2 y exfiltración del fichero.
+Reproduzco el ataque en dos fases encadenadas. Primero monto una campaña de **phishing** con GoPhish y MailHog: un correo que suplanta a RRHH lleva a la víctima a un portal falso donde entrega sus credenciales. Después simulo con PowerShell (`emular-ataque.ps1`) la fase de **ejecución y post-explotación**: reconocimiento del sistema, acceso al CSV de clientes, comunicación periódica con el C2 y exfiltración del fichero.
 
 #### Construcción de la campaña de phishing (GoPhish)
 
@@ -199,11 +199,11 @@ Monto la campaña en GoPhish con cuatro piezas. La primera es el **perfil de env
 
 ![Perfil de envío (Sending Profile) de GoPhish](images/03-gophish-sending-profile.png)
 
-La segunda pieza es el **grupo de destinatarios**, los empleados de RR. HH. de Nexora (datos ficticios) a los que se dirige el simulacro:
+La segunda pieza es el **grupo de destinatarios**, los empleados de RRHH de Nexora (datos ficticios) a los que se dirige el simulacro:
 
 ![Grupo de usuarios objetivo en GoPhish](images/03-gophish-grupo-usuarios.png)
 
-La tercera es la **plantilla del correo**, el mensaje que suplanta a RR. HH. e incorpora el enlace malicioso mediante la variable `{{.URL}}` y un píxel de seguimiento con `{{.Tracker}}` que permite saber si la víctima abre el correo:
+La tercera es la **plantilla del correo**, el mensaje que suplanta a RRHH e incorpora el enlace malicioso mediante la variable `{{.URL}}` y un píxel de seguimiento con `{{.Tracker}}` que permite saber si la víctima abre el correo:
 
 ![Plantilla del correo de phishing en GoPhish](images/03-gophish-email-template.png)
 
@@ -217,9 +217,9 @@ Lanzada la campaña, el correo sale de GoPhish y lo recoge **MailHog**, el buzó
 
 ![Bandeja de MailHog con los correos de phishing entregados](images/03-mailhog-bandeja.png)
 
-Si abro el correo, veo el señuelo tal y como le llega a la víctima: un mensaje HTML que imita a RR. HH. de Nexora, con un **pretexto de urgencia** (verificar las credenciales antes del 30 de noviembre o la cuenta quedará «suspendida»), la firma de una técnica inventada y un botón **«Verificar mi cuenta»** que enlaza al portal falso (`http://10.10.10.100?rid=...`). Es un ejemplo de manual de ingeniería social: autoridad, urgencia y miedo a perder el acceso.
+Si abro el correo, veo el señuelo tal y como le llega a la víctima: un mensaje HTML que imita a RRHH de Nexora, con un **pretexto de urgencia** (verificar las credenciales antes del 30 de noviembre o la cuenta quedará «suspendida»), la firma de una técnica inventada y un botón **«Verificar mi cuenta»** que enlaza al portal falso (`http://10.10.10.100?rid=...`). Es un ejemplo de manual de ingeniería social: autoridad, urgencia y miedo a perder el acceso.
 
-![Correo de phishing abierto en MailHog, suplantando a RR. HH.](images/03-mailhog-correo.png)
+![Correo de phishing abierto en MailHog, suplantando a RRHH](images/03-mailhog-correo.png)
 
 Al pulsar el botón, la víctima llega al **portal falso** de captura de credenciales, un clon del «Portal del Empleado» servido por GoPhish e indistinguible del real a ojos de un usuario desprevenido:
 
@@ -321,7 +321,7 @@ Un incidente con datos personales no termina en lo técnico: conlleva obligacion
 >
 > Estimados compañeros:
 >
-> Hemos detectado una campaña de correos fraudulentos que **suplantan al departamento de RR. HH.** y piden verificar las credenciales a través de un enlace. **No pulse el enlace ni introduzca su contraseña.**
+> Hemos detectado una campaña de correos fraudulentos que **suplantan al departamento de RRHH** y piden verificar las credenciales a través de un enlace. **No pulse el enlace ni introduzca su contraseña.**
 >
 > Si ya lo ha hecho, **cambie su contraseña de inmediato** y avise al departamento de Informática (ext. XXX). El equipo de seguridad está gestionando el incidente y les mantendrá informados.
 >
@@ -351,7 +351,7 @@ Para cerrar el ciclo simulo una **reunión de crisis del equipo de respuesta** (
 
 El desarrollo completo de la reunión, con el guion de cada intervención, es el siguiente:
 
-**Incidente:** intrusión vía phishing de RR. HH. en Nexora S.L. con sospecha de exfiltración de datos de clientes.
+**Incidente:** intrusión vía phishing de RRHH en Nexora S.L. con sospecha de exfiltración de datos de clientes.
 **Formato:** reunión de crisis del *Equipo de Respuesta a Incidentes* (CSIRT interno). Se convoca 40 minutos después de la primera alerta de nivel 12 en Wazuh.
 
 ### Asistentes y roles
@@ -398,7 +398,7 @@ El analista resume: la usuaria `rrhh.ana` picó en un phishing, entregó credenc
 
 ### Circunstancia 4 — Dirección presiona para recuperar los servicios ya
 
-**Planteamiento:** dirección exige reactivar los equipos de RR. HH. de inmediato porque se está parando el trabajo (nóminas, contratación).
+**Planteamiento:** dirección exige reactivar los equipos de RRHH de inmediato porque se está parando el trabajo (nóminas, contratación).
 
 **Decisión:** el IC mantiene la contención hasta completar erradicación y verificación, pero ofrece una **recuperación por fases**: primero los equipos ya restaurados y verificados, con MFA y macros bloqueadas; los no verificados siguen aislados. Se da a dirección una estimación de tiempos y un canal de actualización cada hora.
 
