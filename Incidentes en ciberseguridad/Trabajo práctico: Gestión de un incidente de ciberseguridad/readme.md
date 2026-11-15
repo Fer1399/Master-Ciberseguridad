@@ -304,6 +304,27 @@ Ese acceso deja huella en el DC como un **inicio de sesión 4624 de tipo 3** (se
 
 `[CAPTURA: evento 4624 (tipo 3) de rrhh.ana en el DC y/o la alerta 100203 en Wazuh]`
 
+### 3.7 Síntesis: de la evidencia a la conclusión
+
+Para cerrar la investigación resumo cómo cada evidencia recogida sostiene una conclusión concreta, sin afirmar más de lo que la prueba permite:
+
+| Evidencia | Hallazgo | Conclusión |
+|-----------|----------|------------|
+| Correo en MailHog + embudo de GoPhish | La víctima abrió el correo y envió sus credenciales | Phishing con robo de credenciales confirmado (T1566.002 / T1056.003) |
+| Sysmon + reglas Wazuh 100200/100201 | Comandos de reconocimiento y PowerShell desde la víctima | Actividad de post-explotación en PC-RRHH-01 (T1033 / T1087 / T1059.001) |
+| Log del C2 + carpeta `recibidos/` (200 bytes) | El C2 recibió y almacenó el CSV de clientes | Exfiltración de datos demostrada (T1071 / T1041) |
+| Evento 4624 (tipo 3) en el DC | Inicio de sesión de `rrhh.ana` desde 10.10.10.50 | Movimiento lateral al dominio con credenciales válidas (T1078 / T1021.002) |
+| SHA-256 + cadena de custodia sellada | Huella de cada evidencia, con libro protegido | Integridad verificable frente a una referencia fiable |
+
+### 3.8 Limitaciones de la investigación
+
+Un análisis honesto separa lo demostrado de lo que son hipótesis:
+
+- **Confirmado por evidencias:** el robo de credenciales (GoPhish), el reconocimiento en la víctima (Sysmon/Wazuh), la **exfiltración del CSV** (recibido y almacenado por el C2) y el **movimiento lateral** al DC (evento 4624).
+- **Hipótesis no confirmadas:** no se ha determinado el alcance real de los datos consultados más allá del CSV de prueba, ni se ha observado **persistencia** efectiva (no apareció una tarea programada maliciosa en este escenario).
+- **Registros que faltarían en un caso real:** una captura de tráfico completa (Wireshark/PCAP) para correlacionar la transferencia byte a byte, y los logs del propio controlador de dominio si no tuviera agente de Wazuh.
+- **Investigación adicional recomendada:** revisar otras cuentas con inicio de sesión en los equipos afectados (eventos 4624 en todo el dominio), buscar reutilización de la credencial en otros servicios y analizar en *sandbox* cualquier binario o adjunto sospechoso.
+
 ---
 
 ## 4. Respuesta y recuperación
@@ -316,6 +337,16 @@ Confirmado el incidente, el objetivo es **contener, erradicar y recuperar** con 
 4. **Eliminación** de la amenaza, retirando cualquier mecanismo de persistencia.
 5. **Recuperación** del equipo a partir de un *snapshot* limpio anterior al incidente.
 6. **Medidas preventivas** para que no se repita: formación, MFA, bloqueo de macros y nuevas reglas en Wazuh.
+
+Cada decisión lleva asociada una justificación, un responsable que la autoriza, un impacto en el negocio y una forma de comprobar que ha surtido efecto:
+
+| Fase | Acción | Quién la autoriza | Impacto en el negocio | Cómo se comprueba |
+|------|--------|-------------------|-----------------------|-------------------|
+| Contención | Aislar PC-RRHH-01 y bloquear la IP del atacante | Coordinador del incidente | El puesto queda sin servicio temporalmente | No hay nuevas conexiones al C2 en firewall/SIEM |
+| Investigación | Preservar registros y evidencias (hash + custodia) | Analista / forense | Nulo; no afecta a producción | El libro de custodia verifica (`sello`) sin alteraciones |
+| Erradicación | Revocar credenciales de `rrhh.ana` y quitar persistencia | Administrador + DPO | La usuaria reautentica con nueva contraseña | No quedan accesos con la credencial comprometida |
+| Recuperación | Restaurar el equipo desde un *snapshot* verificado | Coordinador + dirección | Se recupera el puesto; posible pérdida de trabajo reciente | El hash/fecha del snapshot coincide con la línea base previa |
+| Seguimiento | Supervisar alertas y accesos los días siguientes | SOC / analista | Nulo | Sin reaparición de las alertas 100200–100203 |
 
 Para ejecutar los primeros pasos de forma ordenada y, sobre todo, **trazable**, escribí el script `respuesta-aislar.ps1`. Lo diseñé respetando el **orden de volatilidad**: primero recojo la evidencia que se perdería al apagar o aislar el equipo (conexiones de red activas —resaltando las dirigidas al atacante—, procesos en ejecución, sesiones abiertas, tareas programadas que delaten persistencia, caché ARP y tabla de rutas) y solo después bloqueo al atacante en el firewall y deshabilito los adaptadores de red. Al terminar, **sello toda la evidencia recogida con SHA-256** (`SHA256SUMS.txt`) y dejo un registro con marcas de tiempo (`respuesta.log`), para que la actuación quede documentada en la cadena de custodia. Se ejecuta así:
 
@@ -614,7 +645,7 @@ Write-Ok "Compartido creado (solo lectura, usuarios autenticados): \\$env:COMPUT
 Write-Paso "Instalando agente Wazuh apuntando a $WazuhManager"
 $wazuhMsi = "$WorkDir\tools\wazuh-agent.msi"
 try {
-    Invoke-WebRequest -Uri "https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.0-1.msi" `
+    Invoke-WebRequest -Uri "https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.2-1.msi" `
         -OutFile $wazuhMsi -UseBasicParsing
     Start-Process msiexec.exe -ArgumentList "/i `"$wazuhMsi`" /q WAZUH_MANAGER=`"$WazuhManager`" WAZUH_AGENT_NAME=`"PC-RRHH-01`"" -Wait
     & "C:\Program Files (x86)\ossec-agent\bin\wazuh-control.exe" start 2>$null
