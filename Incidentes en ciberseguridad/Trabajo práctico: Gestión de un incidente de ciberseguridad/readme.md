@@ -141,7 +141,7 @@ El equipo **PC-RRHH-01** es el *paciente cero*: es donde se abre el correo y se 
 
 ### 2.3 Herramientas de detección y registros
 
-Para la detección me apoyo en varias herramientas complementarias: **Wazuh** como SIEM central que recoge y correla los eventos, **Sysmon** para la telemetría detallada del endpoint, **Wireshark** para inspeccionar el tráfico, y el **Visor de eventos** y el **MITRE ATT&CK Navigator** como apoyo al análisis.
+Para la detección me apoyo sobre todo en **Wazuh**, como SIEM central que recoge y correla los eventos, y en **Sysmon**, para la telemetría detallada del endpoint. Como apoyo cuento además con el **Visor de eventos** de Windows, el **MITRE ATT&CK Navigator** para encuadrar las técnicas del atacante y **Wireshark** para inspeccionar el tráfico a nivel de paquete. En esta práctica el análisis de las conexiones con el atacante lo resolví con un script propio sobre el registro del servidor C2 (apartado 3.4), así que Wireshark queda como herramienta complementaria disponible más que como pieza que llegara a usar.
 
 Las fuentes de registro que vigilo son las que cuentan la historia del ataque: los **logs del antivirus** (Defender) y del **firewall**, los **eventos del sistema operativo** (inicios de sesión 4624/4625 y creación de procesos 4688), la **telemetría de Sysmon** (procesos, conexiones de red y cambios en ficheros) y el **tráfico de red**, donde se observan el *beacon* periódico hacia el C2 y la exfiltración.
 
