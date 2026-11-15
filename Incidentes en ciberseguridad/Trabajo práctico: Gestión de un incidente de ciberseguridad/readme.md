@@ -50,13 +50,6 @@ Antes de empezar se comprobó que la red funcionaba correctamente. Desde el cont
 
 ![Ping desde DC-NEXORA al resto de VMs del laboratorio](images/01-ping-vms.png)
 
-Durante el montaje surgieron varias incidencias que se resolvieron y que conviene documentar, porque forman parte del trabajo real de administración de un entorno:
-
-- **El instalador de Ubuntu 26.04 se quedaba congelado.** Se resolvió verificando la integridad de la imagen ISO y la configuración de la máquina virtual.
-- **Las máquinas Windows no alcanzaban a las Linux.** Tenían su dirección del laboratorio asignada al *adaptador puente* en lugar de a la Red NAT `nexora-lab`; se corrigió moviendo el adaptador a la red correcta.
-- **Windows 11 no dejaba instalarse por falta de TPM 2.0 y Secure Boot.** Se solventó añadiendo las claves de registro `LabConfig` (`BypassTPMCheck` y `BypassSecureBootCheck`) desde la consola del instalador (Shift+F10).
-- **Wazuh no arrancaba.** El disco del servidor SIEM estaba al 100 % porque Ubuntu solo había asignado 24 de los 50 GB disponibles; se amplió el volumen lógico con `lvextend` y `resize2fs`. Además, el motor de búsqueda requería aumentar el parámetro del sistema `vm.max_map_count` a 262144.
-
 ---
 
 ## 1. Prevención y concienciación
@@ -1380,8 +1373,6 @@ Este trabajo ha recorrido el **ciclo completo de gestión de un incidente** sobr
 En **prevención** se identificaron los riesgos y se crearon materiales de concienciación propios; el propio simulacro aportó una métrica contundente, ya que los dos empleados objetivo abrieron el correo y uno entregó sus credenciales, lo que demuestra por qué la formación es la primera barrera. En **detección**, un SIEM (Wazuh) alimentado por Sysmon y con reglas propias mapeadas a MITRE ATT&CK convirtió la actividad del sistema en alertas accionables con detalle forense. En **investigación**, el ataque se reprodujo por emulación —sin malware real— y se analizó con scripts propios que cubren la integridad de las evidencias, la cadena de custodia, el análisis de las conexiones C2 y la reputación OSINT de los indicadores. En **respuesta**, se automatizó la contención respetando el orden de volatilidad y se definió una erradicación fiable por restauración y revocación de credenciales. Y en **notificación**, se aplicó el marco legal (AEPD, 72 horas) y se identificaron los organismos de apoyo.
 
 La principal **lección aprendida** es que el factor humano es a la vez el eslabón más débil y el más rentable de reforzar; que la detección temprana exige tener telemetría y correlación preparadas *antes* del incidente; y que la trazabilidad de la evidencia (hash y cadena de custodia) es lo que convierte una respuesta improvisada en una respuesta defendible. Como mejoras, se proponen MFA, mínimo privilegio, bloqueo de macros, segmentación de red y un afinado continuo de las reglas del SIEM.
-
-Finalmente, la resolución de incidencias reales de administración durante el montaje (ampliación de disco LVM, ajuste de `vm.max_map_count`, corrección de adaptadores de red y *bypass* de TPM/Secure Boot) refuerza el carácter práctico del trabajo.
 
 ## Fuentes consultadas
 
