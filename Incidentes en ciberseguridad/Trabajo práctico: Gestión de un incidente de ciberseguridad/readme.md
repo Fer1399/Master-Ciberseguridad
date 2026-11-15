@@ -34,7 +34,7 @@ Para trabajarlo de forma práctica y sin riesgos, monté todo el escenario en un
 
 ## Arquitectura del laboratorio
 
-Para el laboratorio reproduje una pequeña red corporativa sobre VirtualBox. Conecté todas las máquinas a una **Red NAT** llamada `nexora-lab`, con direccionamiento `10.10.10.0/24`. Así se ven entre sí y tienen salida a internet para instalarse, pero el laboratorio queda **aislado de mi red doméstica**: ni el ataque ni el tráfico de prueba salen al exterior.
+Para el laboratorio reproduje una pequeña red corporativa sobre VirtualBox. Conecté todas las máquinas a una **Red NAT** llamada `nexora-lab`, con direccionamiento `10.10.10.0/24`. Esa Red NAT da a las VMs **salida a internet** únicamente para instalarse y actualizarse, y hace que el laboratorio **no sea accesible desde mi red doméstica**. El ataque, en cambio, es **interno**: la víctima (10.10.10.50) y el atacante (10.10.10.100) están en la misma red, así que el *beacon*, el C2 y la exfiltración ocurren **entre máquinas del propio laboratorio** y no viajan a internet.
 
 La red tiene cinco elementos: un controlador de dominio que gestiona la empresa, un servidor donde centralizo la detección, el equipo de la víctima, la máquina del atacante y la puerta de enlace:
 
@@ -110,9 +110,9 @@ La criptografía sostiene buena parte de las medidas de seguridad y, en este tra
 
 - **Cifrado simétrico (AES):** usa la misma clave para cifrar y descifrar; es rápido y adecuado para proteger datos en reposo.
 - **Cifrado asimétrico (RSA):** emplea un par de claves, pública y privada; permite el intercambio seguro de información y la firma.
-- **Funciones hash (SHA-256):** generan una huella irreversible de un fichero; son la base para **garantizar la integridad de las evidencias** (apartado 3).
+- **Funciones hash (SHA-256):** generan una huella irreversible de un fichero. Prueban que el fichero **no ha cambiado** (integridad), pero por sí solas no acreditan **quién** lo creó (autenticidad); para eso se combinan con una firma. Son la base para preservar las evidencias (apartado 3).
 - **Certificados digitales y PKI:** vinculan una identidad con su clave pública a través de una autoridad de certificación (CA).
-- **Firma electrónica:** aporta autenticidad e integridad, cifrando el hash de un documento con la clave privada del firmante.
+- **Firma electrónica (firma digital):** mecanismo de **firma y verificación**. El firmante calcula el hash del documento y genera la firma con su **clave privada** (con un esquema como RSA-PSS o ECDSA); cualquiera la **verifica con la clave pública**. Aporta autenticidad, integridad y no repudio.
 - **Diffie-Hellman:** permite acordar una clave secreta sobre un canal inseguro.
 
 > **Conexión práctica.** El mismo SHA-256 que define la integridad de un fichero es el que Sysmon captura de cada binario ejecutado, el que se usa en la cadena de custodia y el que se consulta en VirusTotal (apartado 3). La teoría se vuelve, así, una herramienta de investigación.
@@ -177,7 +177,7 @@ Consolido toda la información anterior en una ficha que acompaña al incidente 
 | Activos afectados | PC-RRHH-01 (10.10.10.50), credenciales de `rrhh.ana`, CSV de clientes |
 | Indicadores (IOC) | IP del C2 10.10.10.100; portal falso; hashes recogidos en `iocs.csv` |
 | Gravedad | ALTA (pasa a CRÍTICA si se confirma la exfiltración) |
-| Técnicas MITRE | T1566.001, T1056, T1059.001, T1033, T1087, T1071, T1048 |
+| Técnicas MITRE | T1566.002, T1056.003, T1059.001, T1033, T1087, T1071, T1041 |
 | Estado | En investigación → contención |
 | Responsable | Coordinador del equipo de respuesta |
 | Acciones realizadas | Detección en el SIEM, preservación de evidencias y análisis OSINT |
@@ -234,7 +234,7 @@ username: rrhh.ana@nexora.lab
 password: verano2027
 ```
 
-> **Nota.** La credencial mostrada es un valor **ficticio de demostración** introducido durante el simulacro; no corresponde a ninguna cuenta real. En términos de MITRE ATT&CK, esta fase combina las técnicas **T1566.001** (*Spearphishing Link*) y **T1056** (captura de entrada del usuario).
+> **Nota.** La credencial mostrada es un valor **ficticio de demostración** introducido durante el simulacro; no corresponde a ninguna cuenta real. En términos de MITRE ATT&CK, esta fase combina **T1566.002** (*Spearphishing Link*, phishing con enlace) y **T1056.003** (*Web Portal Capture*, captura de credenciales en un portal web).
 
 La siguiente captura muestra el embudo completo de la campaña para la víctima Ana Prueba, con el estado final **Submitted Data** y las credenciales capturadas en el detalle del evento:
 
@@ -248,7 +248,7 @@ A nivel de campaña, el panel de GoPhish resume el éxito del simulacro (*Phishi
 
 Las **evidencias que procede recopilar** en este incidente son: el **correo de phishing** con sus cabeceras, la **configuración y la base de datos de GoPhish** (`config.json`, `gophish.db`), el **registro del servidor C2**, el **CSV de clientes** exfiltrado, la **telemetría de Sysmon** y las **alertas de Wazuh**, y los **artefactos volátiles del equipo víctima** (procesos, conexiones de red y tareas programadas recogidos por el script de respuesta).
 
-Antes de analizar nada tengo que garantizar que esas evidencias no se alteran, así que sello cada fichero con su huella **SHA-256**. Mi script `generar-iocs.py` calcula los hashes de toda la campaña (procesé **306 ficheros**) y genera las tablas de indicadores `iocs.csv` e `iocs.md`. Además, con `cadena-custodia.py` llevo un **libro de cadena de custodia** que anota quién recogió cada evidencia, cuándo y con qué hash, y me deja reverificar en cualquier momento que no se ha tocado. En la práctica registré como evidencia la configuración y la base de datos de la campaña (`config.json` y `gophish.db`) y comprobé su integridad con resultado correcto (salidas reales en `scripts/salidas-scripts.txt`):
+Antes de analizar nada tengo que garantizar que esas evidencias no se alteran, así que sello cada fichero con su huella **SHA-256**. Mi script `generar-iocs.py` calcula los hashes de toda la campaña (procesé **306 ficheros**) y genera las tablas de indicadores `iocs.csv` e `iocs.md`. Además, con `cadena-custodia.py` llevo un **libro de cadena de custodia** que anota quién recogió cada evidencia, cuándo y con qué hash, identificándola por su **ruta absoluta** (para no confundir ficheros con el mismo nombre). El propio libro se **sella** con su hash, así que también detecto si alguien manipula el registro. Puedo reverificar en cualquier momento que una evidencia no se ha tocado. En la práctica registré como evidencia la configuración y la base de datos de la campaña (`config.json` y `gophish.db`) y comprobé su integridad con resultado correcto (salidas reales en `scripts/salidas-scripts.txt`):
 
 ```
 [+] Evidencia registrada: config.json
@@ -267,13 +267,14 @@ Mi script `osint-lookup.py` me automatiza esta consulta: detecta si el indicador
 
 ### 3.4 Análisis de las conexiones sospechosas
 
-Para estudiar la comunicación con el atacante escribí `analizar-conexiones.py`, que procesa el registro del servidor C2 y clasifica cada petición. El análisis confirmó el patrón característico de un mando y control: **cuatro conexiones periódicas de tipo *beacon*** y **una petición POST de exfiltración** con el CSV de clientes, todas desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
+Para estudiar la comunicación con el atacante monté un **servidor C2 propio** (`c2-server.py`) que, a diferencia de `python3 -m http.server`, **recibe y guarda en disco** el fichero que se le envía y registra los **bytes** de cada POST. Sobre ese log, mi script `analizar-conexiones.py` separa los *beacon* de la exfiltración, comprueba que las conexiones se dirigen al atacante y **suma los bytes realmente recibidos** —que es lo que confirma la exfiltración, no la simple existencia de la petición—. El resultado: **cuatro *beacon* periódicos** y **un POST de 200 bytes recibido y almacenado** en el C2, desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
 
 ```
-Beacon / C2: 4 peticiones GET /beacon  (patrón periódico = C2)
-Exfiltración: 1 POST /exfil_clientes.csv
-Conclusión: víctima 10.10.10.50 -> atacante 10.10.10.100
-Técnicas: C2 (T1071) y exfiltración (T1048)
+=== Exfiltracion de datos (POST recibidos) ===
+  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  200 bytes  [RECIBIDO Y ALMACENADO]
+  Total exfiltrado: 200 bytes en 1 POST
+[+] CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 200 bytes exfiltrados.
+    Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).
 ```
 
 ### 3.5 Detección correlada en Wazuh
@@ -283,7 +284,7 @@ Todo lo anterior lo observo, en paralelo, desde el SIEM. Para ello escribí **re
 | ID de regla | Descripción | Nivel | MITRE |
 |-------------|-------------|-------|-------|
 | 100200 | Comando de reconocimiento ejecutado | 10 | T1033 / T1087 |
-| 100201 | PowerShell de descarga o exfiltración | 12 | T1059.001 / T1048 |
+| 100201 | PowerShell de descarga o exfiltración | 12 | T1059.001 / T1041 |
 | 100202 | Conexión saliente a la IP del atacante (10.10.10.100) | 12 | T1071 |
 
 El resultado fueron **20 alertas de reconocimiento** (regla 100200) y **3 alertas de nivel 12** correspondientes a la exfiltración y el C2. Lo valioso es el detalle forense que acompaña a cada alerta. La siguiente captura, tomada de la vista *Discover* de Wazuh, muestra un único evento de reconocimiento con toda su cadena de evidencia: el comando ejecutado (`systeminfo`), su proceso padre (`cmd.exe /c systeminfo`), el usuario (`NEXORA\Administrador`), el nivel de integridad, el canal de Sysmon y el **hash SHA-256** del binario —el mismo que se verificó por OSINT en el punto 3.3—. Así se cierra el círculo entre la telemetría del endpoint y el análisis:
@@ -327,7 +328,7 @@ Un incidente con datos personales no termina en lo técnico: conlleva obligacion
 >
 > Gracias por su colaboración. — Equipo de Seguridad de la Información
 
-En el plano legal, al existir **sospecha de exfiltración de datos de clientes**, procede notificar la **brecha de datos personales a la Agencia Española de Protección de Datos (AEPD)** en un plazo máximo de **72 horas** desde que se tiene conocimiento, conforme al artículo 33 del RGPD; si hay un riesgo alto para los afectados, también debe informarse a estos (artículo 34).
+En el plano legal hay que distinguir dos obligaciones. La **notificación a la AEPD** (art. 33 del RGPD) procede **cuando la brecha pueda suponer un riesgo para los derechos y libertades de las personas** —no de forma automática ante cualquier incidente— y se hace sin dilación indebida y, cuando sea posible, en un plazo máximo de **72 horas** desde que se tiene conocimiento. Si además el riesgo es **alto**, hay que **comunicar la brecha a los propios afectados** (art. 34). En este caso, al haber **exfiltración confirmada de datos de clientes**, la notificación a la AEPD procede.
 
 Por último, Nexora se apoyaría en **equipos de respuesta a incidentes (CERT/CSIRT)**. Su función es prevenir y responder a incidentes de ciberseguridad: emiten alertas y avisos tempranos, prestan soporte técnico durante la gestión, analizan amenazas y coordinan la respuesta a escala nacional o sectorial. Se recurriría al menos a dos:
 
@@ -335,6 +336,16 @@ Por último, Nexora se apoyaría en **equipos de respuesta a incidentes (CERT/CS
 - **CCN-CERT (España).** Del Centro Criptológico Nacional; da servicio al sector público y gestiona los incidentes de especial gravedad.
 
 A escala internacional existen además referencias como **ENISA** (Agencia de la Unión Europea para la Ciberseguridad), que coordina y publica guías y buenas prácticas, y **CISA** (Estados Unidos), que emite alertas y recomendaciones ampliamente seguidas.
+
+En resumen, la función de cada organismo:
+
+| Organismo | Cuándo interviene / función |
+|-----------|-----------------------------|
+| **AEPD** | Autoridad de control: recibe la notificación de brechas de datos personales cuando procede (art. 33 RGPD) |
+| **INCIBE-CERT** | Asistencia técnica ante incidentes a ciudadanos y empresas en España |
+| **CCN-CERT** | Respuesta a incidentes en organismos y entidades del sector público (su ámbito) |
+| **ENISA** (UE) | Coordinación, guías y buenas prácticas de ciberseguridad a nivel europeo |
+| **CISA** (EE. UU.) | Alertas y recomendaciones de referencia internacional |
 
 ---
 
@@ -458,7 +469,7 @@ Todos los scripts se han escrito a medida para este trabajo. Las **claves API** 
 
 ### `deploy-victima.ps1`
 
-*Prepara la víctima: Sysmon + auditoría + agente Wazuh.*
+*Prepara la víctima: Sysmon + auditoría + agente Wazuh (recurso compartido con mínimo privilegio).*
 
 ```powershell
 <#
@@ -476,7 +487,8 @@ Todos los scripts se han escrito a medida para este trabajo. Las **claves API** 
     Set-ExecutionPolicy -Scope Process Bypass -Force
     .\deploy-victima.ps1 -WazuhManager 10.10.10.20
 
- ENTORNO: ejecutar SOLO en la VM de laboratorio aislada (host-only).
+ ENTORNO: ejecutar SOLO en la VM de laboratorio, dentro de la red
+          aislada de VirtualBox (Red NAT 'nexora-lab', 10.10.10.0/24).
           No ejecutar en un equipo real. Datos de clientes = inventados.
 =====================================================================
 #>
@@ -568,10 +580,21 @@ id,nombre,email,telefono,dni_ficticio,saldo
 "@
 Set-Content -Path "$sharePath\clientes_CONFIDENCIAL.csv" -Value $clientes -Encoding UTF8
 
+# Minimo privilegio: NO se comparte con "Everyone/FullAccess". Se concede
+# solo lectura a los usuarios autenticados (SID S-1-5-11, valido en cualquier
+# idioma de Windows); en un dominio real se restringiria al grupo de RR. HH.
 if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
-    New-SmbShare -Name $ShareName -Path $sharePath -FullAccess "Everyone" | Out-Null
+    New-SmbShare -Name $ShareName -Path $sharePath `
+        -ReadAccess "S-1-5-11" | Out-Null
 }
-Write-Ok "Compartido creado: \\$env:COMPUTERNAME\$ShareName"
+# Refuerzo en NTFS: retira la herencia abierta y deja solo lectura al mismo grupo
+$acl = Get-Acl $sharePath
+$acl.SetAccessRuleProtection($true, $false)
+$regla = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    "S-1-5-11", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
+$acl.AddAccessRule($regla)
+Set-Acl $sharePath $acl
+Write-Ok "Compartido creado (solo lectura, usuarios autenticados): \\$env:COMPUTERNAME\$ShareName"
 
 # --- 4. Agente Wazuh --------------------------------------------------
 # Envia toda la telemetria (Sysmon, eventos de seguridad) al SIEM central.
@@ -623,7 +646,7 @@ Write-Host "=====================================================" -ForegroundCo
  (reconocimiento, acceso a datos, beacon y exfiltracion) usando
  comandos legitimos de Windows, para que Sysmon/Wazuh lo detecten.
  Ejecutar en PC-RRHH-01, PowerShell como Administrador.
- Atacante (C2 simulado): Kali 10.10.10.100
+ Atacante (C2): Kali 10.10.10.100, con c2-server.py escuchando en :8000
 =====================================================================
 #>
 
@@ -670,6 +693,85 @@ try {
 } catch {}
 
 Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -ForegroundColor Green
+```
+
+### `c2-server.py`
+
+*Servidor C2 que recibe y guarda el fichero exfiltrado (demuestra la exfiltración).*
+
+```python
+#!/usr/bin/env python3
+"""
+c2-server.py  -  Servidor de mando y control (C2) simulado
+--------------------------------------------------------------------
+Proyecto: TP Gestion de incidente - Nexora S.L.  (Fer1399)
+Apartado 3: Investigacion y analisis.
+
+Sustituye a `python3 -m http.server`, que NO almacena los POST. Este
+servidor:
+  - Responde a los beacon (GET /beacon?id=...).
+  - RECIBE Y GUARDA en disco el fichero exfiltrado (POST), registrando
+    los bytes recibidos. Asi la exfiltracion queda DEMOSTRADA (el CSV
+    llega y se almacena), no solo indicada por una peticion.
+
+Escribe un log en formato compatible con `analizar-conexiones.py`
+(incluye los bytes en las peticiones POST).
+
+USO (en el atacante, Kali 10.10.10.100):
+    python3 c2-server.py 8000
+Los ficheros recibidos se guardan en ./recibidos/ y el log en ./c2.log
+"""
+import sys, os, datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+DIR_RECIBIDOS = "recibidos"
+LOG = "c2.log"
+
+
+def registrar(ip, metodo, ruta, codigo, tam):
+    ts = datetime.datetime.now().strftime("%d/%b/%Y %H:%M:%S")
+    linea = f'{ip} - - [{ts}] "{metodo} {ruta} HTTP/1.1" {codigo} {tam}'
+    print(linea)
+    with open(LOG, "a", encoding="utf-8") as f:
+        f.write(linea + "\n")
+
+
+class C2(BaseHTTPRequestHandler):
+    def _responder(self, cuerpo=b"ok"):
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(cuerpo)))
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
+    def do_GET(self):
+        self._responder(b"beacon-ack")
+        registrar(self.client_address[0], "GET", self.path, 200, "-")
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        datos = self.rfile.read(n)
+        os.makedirs(DIR_RECIBIDOS, exist_ok=True)
+        nombre = os.path.basename(self.path) or "exfil.bin"
+        sello = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        destino = os.path.join(DIR_RECIBIDOS, f"{sello}_{nombre}")
+        with open(destino, "wb") as f:
+            f.write(datos)
+        self._responder(b"recibido")
+        # El tamano (bytes) es la prueba de que el fichero llego y se guardo
+        registrar(self.client_address[0], "POST", self.path, 200, len(datos))
+        print(f"    [+] {len(datos)} bytes guardados en {destino}")
+
+    def log_message(self, *a):   # silenciamos el log por defecto (usamos el nuestro)
+        pass
+
+
+if __name__ == "__main__":
+    puerto = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    registrar("0.0.0.0", "INFO", f"C2 escuchando en :{puerto}", "-", "-")
+    try:
+        HTTPServer(("0.0.0.0", puerto), C2).serve_forever()
+    except KeyboardInterrupt:
+        print("\n[*] C2 detenido.")
 ```
 
 ### `respuesta-aislar.ps1`
@@ -781,18 +883,25 @@ Log "Equipo aislado de la red. La evidencia ya esta recogida en local."
 # PASO 4 - SELLADO DE LA EVIDENCIA (SHA-256) PARA LA CADENA DE CUSTODIA
 # ------------------------------------------------------------------
 Log "--- PASO 4: sellado de evidencia con SHA-256 ---"
-$hashes = Get-ChildItem -Path $dir -File | ForEach-Object {
-    $h = Get-FileHash $_.FullName -Algorithm SHA256
-    "{0}  {1}" -f $h.Hash, $_.Name
-}
-$hashes | Out-File (Join-Path $dir "SHA256SUMS.txt")
-Log "Evidencia sellada. Hashes en SHA256SUMS.txt"
-
+# IMPORTANTE: primero cerramos el log (ultimas anotaciones) y SOLO despues
+# calculamos los hashes, para que el SHA-256 de respuesta.log corresponda a
+# su estado FINAL. El propio SHA256SUMS.txt se excluye del calculo.
 Log "=== RESPUESTA COMPLETADA ==="
 Log "Siguiente paso manual: revocar credenciales de rrhh.ana en el AD,"
-Log "restaurar PC-RRHH-01 desde snapshot limpio y notificar segun el plan (AEPD/CERT)."
+Log "restaurar PC-RRHH-01 desde un snapshot verificado como limpio (comparar su"
+Log "hash/fecha con la linea base previa al incidente) y notificar (AEPD/CERT)."
+
+# A partir de aqui NO se vuelve a escribir en respuesta.log.
+$hashes = Get-ChildItem -Path $dir -File |
+    Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+        $h = Get-FileHash $_.FullName -Algorithm SHA256
+        "{0}  {1}" -f $h.Hash, $_.Name
+    }
+$hashes | Out-File (Join-Path $dir "SHA256SUMS.txt")
+
 Write-Host ""
 Write-Host "Evidencia y log en: $dir" -ForegroundColor Green
+Write-Host "Integridad sellada en SHA256SUMS.txt (respuesta.log incluido en su estado final)." -ForegroundColor Green
 ```
 
 ### `generar-iocs.py`
@@ -882,7 +991,7 @@ if __name__ == "__main__":
 
 ### `cadena-custodia.py`
 
-*Registra y verifica evidencias por su hash (cadena de custodia).*
+*Cadena de custodia por ruta absoluta, con sellado del propio libro.*
 
 ```python
 #!/usr/bin/env python3
@@ -892,27 +1001,33 @@ cadena-custodia.py  -  Registro de cadena de custodia de evidencias
 Proyecto: TP Gestion de incidente - Nexora S.L.  (Fer1399)
 Apartado 3: Investigacion y analisis  /  Cadena de custodia.
 
-Registra cada evidencia con su SHA-256, tamano, fecha/hora y la
-persona que la recoge, y lo anade a un libro de custodia (JSON + MD).
-Permite demostrar que la evidencia NO se ha alterado: se puede
-re-verificar el hash en cualquier momento.
+Registra cada evidencia con su SHA-256, ruta absoluta, tamano,
+fecha/hora y la persona que la recoge. Mejoras frente a la version
+inicial:
+  - Identifica cada evidencia por su RUTA ABSOLUTA (no solo el nombre),
+    de modo que dos ficheros con el mismo nombre no se confunden.
+  - Controla errores: fichero inexistente o argumentos incompletos.
+  - Protege el propio libro: tras cada cambio calcula el SHA-256 del
+    JSON y lo guarda en `cadena-custodia.sha256`. El comando `sello`
+    comprueba que el libro no se ha modificado por fuera.
 
 USO:
-    # Registrar una evidencia:
-    python3 cadena-custodia.py add correo_phishing.eml --quien "L.F. Arrosquipa" --desc "Correo de phishing capturado en MailHog"
-
-    # Verificar que una evidencia registrada no ha cambiado:
-    python3 cadena-custodia.py verify correo_phishing.eml
-
-    # Listar el libro de custodia:
+    python3 cadena-custodia.py add <ruta> --quien "L.F. Arrosquipa" --desc "..."
+    python3 cadena-custodia.py verify <ruta>      # la evidencia no ha cambiado
+    python3 cadena-custodia.py sello               # el LIBRO no ha cambiado
     python3 cadena-custodia.py list
 """
-import sys, os, hashlib, json, datetime
+import sys
+import os
+import hashlib
+import json
+import datetime
 
 LIBRO = "cadena-custodia.json"
+SELLO = "cadena-custodia.sha256"
 
 
-def sha256(ruta):
+def sha256_fichero(ruta):
     h = hashlib.sha256()
     with open(ruta, "rb") as f:
         for b in iter(lambda: f.read(65536), b""):
@@ -920,67 +1035,106 @@ def sha256(ruta):
     return h.hexdigest()
 
 
+def sha256_texto(txt):
+    return hashlib.sha256(txt.encode("utf-8")).hexdigest()
+
+
 def cargar():
     if os.path.exists(LIBRO):
-        return json.load(open(LIBRO, encoding="utf-8"))
+        with open(LIBRO, encoding="utf-8") as f:
+            return json.load(f)
     return []
 
 
 def guardar(reg):
-    json.dump(reg, open(LIBRO, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    # Exportar tambien a Markdown
+    texto = json.dumps(reg, indent=2, ensure_ascii=False)
+    with open(LIBRO, "w", encoding="utf-8") as f:
+        f.write(texto)
+    # Sella el propio libro: su hash queda fuera, para detectar manipulaciones
+    with open(SELLO, "w", encoding="utf-8") as f:
+        f.write(sha256_texto(texto) + "\n")
     with open("cadena-custodia.md", "w", encoding="utf-8") as f:
         f.write("# Cadena de custodia de evidencias\n\n")
-        f.write("| # | Evidencia | SHA-256 | Tamano | Recogida por | Fecha/hora | Descripcion |\n")
-        f.write("|---|---|---|---|---|---|---|\n")
+        f.write("| # | Evidencia | Ruta | SHA-256 | Tamano | Recogida por | Fecha/hora | Descripcion |\n")
+        f.write("|---|---|---|---|---|---|---|---|\n")
         for i, e in enumerate(reg, 1):
-            f.write(f"| {i} | {e['fichero']} | `{e['sha256']}` | {e['tamano']} | "
-                    f"{e['recogida_por']} | {e['fecha']} | {e['descripcion']} |\n")
+            f.write(f"| {i} | {e['fichero']} | `{e['ruta']}` | `{e['sha256']}` | "
+                    f"{e['tamano']} | {e['recogida_por']} | {e['fecha']} | {e['descripcion']} |\n")
+
+
+def pedir_ruta():
+    if len(sys.argv) < 3:
+        print("[!] Falta la ruta de la evidencia.")
+        sys.exit(1)
+    ruta = sys.argv[2]
+    if not os.path.isfile(ruta):
+        print(f"[!] No existe el fichero: {ruta}")
+        sys.exit(1)
+    return ruta
 
 
 def main():
     if len(sys.argv) < 2:
-        print(__doc__); sys.exit(1)
+        print(__doc__)
+        sys.exit(1)
     accion = sys.argv[1]
     reg = cargar()
 
     if accion == "add":
-        ruta = sys.argv[2]
-        quien = "desconocido"; desc = ""
-        if "--quien" in sys.argv: quien = sys.argv[sys.argv.index("--quien") + 1]
-        if "--desc" in sys.argv:  desc = sys.argv[sys.argv.index("--desc") + 1]
+        ruta = pedir_ruta()
+        abs_ruta = os.path.abspath(ruta)
+        quien = sys.argv[sys.argv.index("--quien") + 1] if "--quien" in sys.argv else "desconocido"
+        desc = sys.argv[sys.argv.index("--desc") + 1] if "--desc" in sys.argv else ""
         e = {
             "fichero": os.path.basename(ruta),
-            "ruta": os.path.abspath(ruta),
-            "sha256": sha256(ruta),
+            "ruta": abs_ruta,
+            "sha256": sha256_fichero(ruta),
             "tamano": os.path.getsize(ruta),
             "recogida_por": quien,
             "fecha": datetime.datetime.now().isoformat(timespec="seconds"),
             "descripcion": desc,
         }
-        reg.append(e); guardar(reg)
-        print(f"[+] Evidencia registrada: {e['fichero']}")
+        reg.append(e)
+        guardar(reg)
+        print(f"[+] Evidencia registrada: {e['fichero']}  ({abs_ruta})")
         print(f"    SHA-256: {e['sha256']}")
 
     elif accion == "verify":
-        ruta = sys.argv[2]
-        nombre = os.path.basename(ruta)
-        actual = sha256(ruta)
-        for e in reg:
-            if e["fichero"] == nombre:
-                ok = e["sha256"] == actual
-                print(f"[{'OK' if ok else '!!'}] {nombre}")
-                print(f"    Registrado: {e['sha256']}")
-                print(f"    Actual:     {actual}")
-                print("    => INTEGRIDAD INTACTA" if ok else "    => EVIDENCIA ALTERADA")
-                return
-        print(f"[!] {nombre} no esta en el libro de custodia.")
+        ruta = pedir_ruta()
+        abs_ruta = os.path.abspath(ruta)
+        actual = sha256_fichero(ruta)
+        # Busca por ruta absoluta; si no, por nombre como respaldo
+        entrada = next((e for e in reg if e["ruta"] == abs_ruta), None) \
+            or next((e for e in reg if e["fichero"] == os.path.basename(ruta)), None)
+        if not entrada:
+            print(f"[!] {abs_ruta} no esta en el libro de custodia.")
+            return
+        ok = entrada["sha256"] == actual
+        print(f"[{'OK' if ok else '!!'}] {entrada['fichero']}  ({entrada['ruta']})")
+        print(f"    Registrado: {entrada['sha256']}")
+        print(f"    Actual:     {actual}")
+        print("    => INTEGRIDAD INTACTA" if ok else "    => EVIDENCIA ALTERADA")
+
+    elif accion == "sello":
+        # Verifica que el propio LIBRO no se haya modificado por fuera
+        if not (os.path.exists(LIBRO) and os.path.exists(SELLO)):
+            print("[!] No hay libro o sello que comprobar.")
+            return
+        actual = sha256_texto(open(LIBRO, encoding="utf-8").read())
+        guardado = open(SELLO, encoding="utf-8").read().strip()
+        ok = actual == guardado
+        print(f"[{'OK' if ok else '!!'}] Sello del libro de custodia")
+        print(f"    Sellado: {guardado}")
+        print(f"    Actual:  {actual}")
+        print("    => LIBRO INTEGRO" if ok else "    => EL LIBRO HA SIDO MODIFICADO")
 
     elif accion == "list":
         if not reg:
-            print("[*] Libro de custodia vacio."); return
+            print("[*] Libro de custodia vacio.")
+            return
         for i, e in enumerate(reg, 1):
             print(f"{i}. {e['fichero']}  ({e['fecha']}, {e['recogida_por']})")
+            print(f"   Ruta:    {e['ruta']}")
             print(f"   SHA-256: {e['sha256']}")
     else:
         print(__doc__)
@@ -992,7 +1146,7 @@ if __name__ == "__main__":
 
 ### `analizar-conexiones.py`
 
-*Analiza el log del C2 y clasifica beacon y exfiltración.*
+*Analiza el log del C2, valida el destino y suma los bytes exfiltrados.*
 
 ```python
 #!/usr/bin/env python3
@@ -1002,80 +1156,102 @@ analizar-conexiones.py  -  Analisis de conexiones sospechosas
 Proyecto: TP Gestion de incidente - Nexora S.L.  (Fer1399)
 Apartado 3: Investigacion y analisis.
 
-Lee un log de acceso (por ejemplo la salida del servidor del atacante
-`python3 -m http.server`, o un volcado de conexiones) y resalta las
-peticiones relacionadas con el incidente: beacon periodico y
-exfiltracion hacia la IP del atacante.
+Lee el log del servidor C2 (`c2-server.py`, que registra tambien los
+BYTES recibidos en cada POST) y:
+  - Separa beacon (GET) de exfiltracion (POST).
+  - Valida que las peticiones se dirijan a la IP del atacante
+    (parametro --atacante) y descarta el resto.
+  - Suma los BYTES realmente recibidos en los POST: eso es lo que
+    confirma la exfiltracion, no la mera existencia de la peticion.
 
 USO:
-    # Guarda primero la salida del C2 en un fichero, p.ej.:
-    #   python3 -m http.server 8000 2>&1 | tee c2.log
-    python3 analizar-conexiones.py c2.log
     python3 analizar-conexiones.py c2.log --atacante 10.10.10.100
+    python3 analizar-conexiones.py c2.log --atacante 10.10.10.100 --destino 10.10.10.100
 """
-import sys, re
+import sys
+import re
 from collections import Counter
 
-IP_ATACANTE = "10.10.10.100"
+
+def arg(nombre, defecto=None):
+    return sys.argv[sys.argv.index(nombre) + 1] if nombre in sys.argv else defecto
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__); sys.exit(1)
+    if len(sys.argv) < 2 or sys.argv[1].startswith("--"):
+        print(__doc__)
+        sys.exit(1)
+
     log = sys.argv[1]
-    if "--atacante" in sys.argv:
-        global IP_ATACANTE
-        IP_ATACANTE = sys.argv[sys.argv.index("--atacante") + 1]
+    ip_atacante = arg("--atacante", "10.10.10.100")
+    # IP del servidor C2 que registro el log (destino de las conexiones).
+    # Por defecto es la del propio atacante.
+    ip_destino = arg("--destino", ip_atacante)
 
     try:
-        lineas = open(log, encoding="utf-8", errors="ignore").read().splitlines()
+        with open(log, encoding="utf-8", errors="ignore") as f:
+            lineas = f.read().splitlines()
     except FileNotFoundError:
-        print(f"[!] No existe el fichero: {log}"); sys.exit(1)
+        print(f"[!] No existe el fichero de log: {log}")
+        sys.exit(1)
 
-    # Formato tipico de http.server:
-    # 10.10.10.50 - - [14/Nov/2026 23:37:32] "GET /beacon?id=1 HTTP/1.1" 200 -
-    patron = re.compile(r'(\d+\.\d+\.\d+\.\d+).*?"(\w+)\s+(\S+)\s+HTTP')
+    # Formato de c2-server.py / http.server:
+    # 10.10.10.50 - - [15/Nov/2026 02:30:05] "POST /exfil.csv HTTP/1.1" 200 1234
+    patron = re.compile(
+        r'(\d+\.\d+\.\d+\.\d+).*?"(\w+)\s+(\S+)\s+HTTP/[\d.]+"\s+(\d+)\s+(\S+)'
+    )
 
     beacons, exfil, origenes = [], [], Counter()
+    bytes_exfiltrados = 0
+    descartadas = 0
+
     for ln in lineas:
         m = patron.search(ln)
         if not m:
             continue
-        ip, metodo, ruta = m.groups()
+        ip, metodo, ruta, codigo, tam = m.groups()
+        # Solo cuentan las conexiones de un host hacia el C2 (peticiones
+        # entrantes registradas por el servidor del atacante).
+        if ip == ip_destino:
+            continue  # la propia linea informativa del C2, no es un cliente
         origenes[ip] += 1
-        if "beacon" in ruta.lower():
-            beacons.append((ip, metodo, ruta))
-        if "exfil" in ruta.lower() or metodo.upper() == "POST":
-            exfil.append((ip, metodo, ruta))
+        if metodo.upper() == "GET" and "beacon" in ruta.lower():
+            beacons.append((ip, ruta, codigo))
+        elif metodo.upper() == "POST":
+            n = int(tam) if tam.isdigit() else 0
+            exfil.append((ip, ruta, codigo, n))
+            if codigo == "200":
+                bytes_exfiltrados += n
 
-    print(f"[*] Analizando {log}  (IP atacante: {IP_ATACANTE})\n")
-    print("=== Origenes de las conexiones ===")
+    print(f"[*] Analizando {log}")
+    print(f"    IP del atacante / C2: {ip_destino}\n")
+
+    print("=== Origenes de las conexiones (clientes del C2) ===")
     for ip, n in origenes.most_common():
-        marca = "  <-- VICTIMA" if ip != IP_ATACANTE else ""
+        marca = "  <-- VICTIMA" if ip != ip_destino else ""
         print(f"  {ip:16} {n} peticiones{marca}")
 
-    print(f"\n=== Beacon / C2 (posible comunicacion con el atacante) ===")
-    if beacons:
-        for ip, met, ruta in beacons:
-            print(f"  [BEACON] {ip} -> {met} {ruta}")
-        print(f"  Total beacons detectados: {len(beacons)}  (patron periodico = C2)")
-    else:
-        print("  (ninguno)")
+    print("\n=== Beacon / C2 (comunicacion periodica) ===")
+    for ip, ruta, cod in beacons:
+        print(f"  [BEACON] {ip} -> GET {ruta}  (HTTP {cod})")
+    print(f"  Total beacons: {len(beacons)}  (patron periodico = C2, MITRE T1071)")
 
-    print(f"\n=== Posible exfiltracion de datos ===")
-    if exfil:
-        for ip, met, ruta in exfil:
-            print(f"  [EXFIL] {ip} -> {met} {ruta}")
-    else:
-        print("  (ninguna)")
+    print("\n=== Exfiltracion de datos (POST recibidos) ===")
+    for ip, ruta, cod, n in exfil:
+        estado = "RECIBIDO Y ALMACENADO" if cod == "200" else f"HTTP {cod}"
+        print(f"  [EXFIL] {ip} -> POST {ruta}  {n} bytes  [{estado}]")
+    print(f"  Total exfiltrado: {bytes_exfiltrados} bytes en {len(exfil)} POST")
 
     print("\n[+] Conclusion:")
-    if beacons or exfil:
-        print(f"    La victima estableció {len(beacons)} conexiones de beacon y "
-              f"{len(exfil)} de exfiltracion hacia {IP_ATACANTE}.")
-        print("    Indicadores compatibles con C2 (T1071) y exfiltracion (T1048).")
+    if bytes_exfiltrados > 0:
+        print(f"    CONFIRMADO: el C2 ({ip_destino}) recibio y almaceno "
+              f"{bytes_exfiltrados} bytes exfiltrados desde la victima.")
+        print("    Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).")
+    elif exfil:
+        print("    INDICADOR: hay peticiones POST, pero ninguna confirma datos "
+              "almacenados (revisar codigos de respuesta).")
     else:
-        print("    No se detectaron conexiones sospechosas en el log.")
+        print("    No se detectaron conexiones de exfiltracion en el log.")
 
 
 if __name__ == "__main__":
@@ -1200,98 +1376,7 @@ Se recogen a continuación las salidas reales obtenidas al ejecutar los scripts 
 
 
 ###########################################################################
-# 3.2  CADENA DE CUSTODIA  (cadena-custodia.py)
-###########################################################################
-
-$ python3 cadena-custodia.py add ~/gophish/config.json --quien "L.F. Arrosquipa" --desc "Config de GoPhish (evidencia)"
-$ python3 cadena-custodia.py add ~/gophish/gophish.db  --quien "L.F. Arrosquipa" --desc "Base de datos de la campaña de phishing"
-$ python3 cadena-custodia.py list
-$ python3 cadena-custodia.py verify ~/gophish/config.json
-
-[+] Evidencia registrada: config.json
-    SHA-256: c3cdad7b48817696f7cdfb4f95f927e2063d058516c2d2153de30a4c031cfada
-[+] Evidencia registrada: gophish.db
-    SHA-256: 1e4042887339f0faaf9fd5b6bfc4883eddbc6dd8668878a4eedb24ce2888e92d
-1. config.json  (2026-11-15T00:08:03, L.F. Arrosquipa)
-    SHA-256: c3cdad7b48817696f7cdfb4f95f927e2063d058516c2d2153de30a4c031cfada
-2. gophish.db   (2026-11-15T00:08:03, L.F. Arrosquipa)
-    SHA-256: 1e4042887339f0faaf9fd5b6bfc4883eddbc6dd8668878a4eedb24ce2888e92d
-[OK] config.json
-    Registrado: c3cdad7b48817696f7cdfb4f95f927e2063d058516c2d2153de30a4c031cfada
-    Actual:     c3cdad7b48817696f7cdfb4f95f927e2063d058516c2d2153de30a4c031cfada
-    => INTEGRIDAD INTACTA
-
-
-###########################################################################
-# 3.4  ANÁLISIS DE LAS CONEXIONES DEL C2  (analizar-conexiones.py)
-###########################################################################
-
-$ cat > c2.log <<'EOF'
-10.10.10.50 - - [14/Nov/2026 23:37:32] "GET /beacon?id=1 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:34] "GET /beacon?id=2 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:36] "GET /beacon?id=3 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:38] "GET /beacon?id=4 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:40] "POST /exfil_clientes.csv HTTP/1.1" 200 -
-EOF
-$ python3 analizar-conexiones.py c2.log
-
-[*] Analizando c2.log  (IP atacante: 10.10.10.100)
-
-== Origenes de las conexiones ==
-  10.10.10.50     5 peticiones  <- VICTIMA
-
-== Beacon / C2 (posible comunicacion con el atacante) ==
-  [BEACON] 10.10.10.50 -> GET /beacon?id=1
-  [BEACON] 10.10.10.50 -> GET /beacon?id=2
-  [BEACON] 10.10.10.50 -> GET /beacon?id=3
-  [BEACON] 10.10.10.50 -> GET /beacon?id=4
-  Total beacons detectados: 4  (patron periodico = C2)
-
-== Posible exfiltracion de datos ==
-  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv
-
-[+] Conclusion:
-    La victima estableció 4 conexiones de beacon y 1 de exfiltracion hacia 10.10.10.100.
-    Indicadores compatibles con C2 (T1071) y exfiltracion (T1048).
-
-
-###########################################################################
-# 3.3  OSINT DE IOCs  (osint-lookup.py)  —  VirusTotal + AbuseIPDB
-###########################################################################
-
-$ export VT_API_KEY="<REDACTADO>"
-$ export ABUSEIPDB_API_KEY="<REDACTADO>"
-
-# --- IP pública de ejemplo (demuestra IP -> AbuseIPDB + VirusTotal) ---
-$ python3 osint-lookup.py 8.8.8.8
-
-[*] IOC: 8.8.8.8  ->  tipo detectado: ip
-
-== VirusTotal ==
-  Detecciones maliciosas: 1/92  (sospechosas: 0)
-  Veredicto: MALICIOSO
-
-== AbuseIPDB ==
-  Puntuacion de abuso: 0%
-  Pais: US  ISP: Google LLC
-  Denuncias totales: 190
-
-[+] Consulta OSINT finalizada.
-
-# --- Hash SHA-256 capturado por Sysmon (systeminfo.exe) -> VirusTotal ---
-$ python3 osint-lookup.py A220A85750588F5B231FF8CB106BA5409EAABB85E3DD7278A98FCA907E171ED2
-
-[*] IOC: A220A85750588F5B231FF8CB106BA5409EAABB85E3DD7278A98FCA907E171ED2  ->  tipo detectado: hash
-
-== VirusTotal ==
-  Detecciones maliciosas: 0/75  (sospechosas: 0)
-  Veredicto: limpio/desconocido
-
-[+] Consulta OSINT finalizada.
-
-
-###########################################################################
-# 3.2 (bis)  CÁLCULO DE HASHES / IOCs  (generar-iocs.py)
+# CÁLCULO DE HASHES / IOCs  (generar-iocs.py)
 ###########################################################################
 
 $ python3 generar-iocs.py ~/gophish/
@@ -1304,19 +1389,107 @@ gophish             SHA256=d931718f3b1f0ee178457b668a2565b7c6faf68832437e5690f08
 config.json         SHA256=c3cdad7b48817696f7cdfb4f95f927e2063d058516c2d2153de30a4c031cfada
 gophish.db          SHA256=1e4042887339f0faaf9fd5b6bfc4883eddbc6dd8668878a4eedb24ce2888e92d
 gophish_admin.crt   SHA256=a8e1e78aec584f7ceb5a64c5bafa21e46189b68b138251c66e9336505ca3b236
-VERSION             SHA256=f6ee69bf1c4b27a242266ccb5aeb4aa8c8306345b9ebe4ff7335b8c940452b81
-README.md           SHA256=766b19175bfe530da595aa6609ad7b7d51fb3d666bbc84c9235a703f5bcafcb2
-LICENSE             SHA256=b88193848775aad7ef1db3134f8f7323a1e8df4fa9d4c2b6a7c917d01481cc09
-templates/login.html        SHA256=b9800af1453767b0e65eed3993996cce1152a4c1f281ef70b9f363abe4e5f658
-templates/landing_pages.html SHA256=ca4190b1d8b4fe0f8086ba22e567eb59368e7d020fa6b112982a3647008c7132
-# ... (296 ficheros más de la instalación de GoPhish sellados en iocs.csv/iocs.md)
+# ... (302 ficheros más de la instalación de GoPhish sellados en iocs.csv/iocs.md)
+
+
+###########################################################################
+# EXFILTRACIÓN DEMOSTRADA: SERVIDOR C2 (c2-server.py) + ANÁLISIS
+###########################################################################
+
+# El servidor C2 no solo registra la petición: RECIBE y GUARDA el fichero,
+# así la exfiltración queda probada por los bytes almacenados en el atacante.
+
+$ python3 c2-server.py 8000          # en el atacante (Kali, 10.10.10.100)
+
+10.10.10.50 - - [14/Nov/2026 23:37:32] "GET /beacon?id=1 HTTP/1.1" 200 -
+10.10.10.50 - - [14/Nov/2026 23:37:34] "GET /beacon?id=2 HTTP/1.1" 200 -
+10.10.10.50 - - [14/Nov/2026 23:37:36] "GET /beacon?id=3 HTTP/1.1" 200 -
+10.10.10.50 - - [14/Nov/2026 23:37:38] "GET /beacon?id=4 HTTP/1.1" 200 -
+10.10.10.50 - - [14/Nov/2026 23:37:40] "POST /exfil_clientes.csv HTTP/1.1" 200 200
+    [+] 200 bytes guardados en recibidos/20261114_233740_exfil_clientes.csv
+
+# Análisis del log, con validación de destino y recuento de bytes recibidos:
+$ python3 analizar-conexiones.py c2.log --atacante 10.10.10.100
+
+[*] Analizando c2.log
+    IP del atacante / C2: 10.10.10.100
+
+=== Origenes de las conexiones (clientes del C2) ===
+  10.10.10.50      5 peticiones  <-- VICTIMA
+
+=== Beacon / C2 (comunicacion periodica) ===
+  [BEACON] 10.10.10.50 -> GET /beacon?id=1  (HTTP 200)
+  [BEACON] 10.10.10.50 -> GET /beacon?id=2  (HTTP 200)
+  [BEACON] 10.10.10.50 -> GET /beacon?id=3  (HTTP 200)
+  [BEACON] 10.10.10.50 -> GET /beacon?id=4  (HTTP 200)
+  Total beacons: 4  (patron periodico = C2, MITRE T1071)
+
+=== Exfiltracion de datos (POST recibidos) ===
+  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  200 bytes  [RECIBIDO Y ALMACENADO]
+  Total exfiltrado: 200 bytes en 1 POST
+
+[+] Conclusion:
+    CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 200 bytes exfiltrados desde la victima.
+    Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).
+
+
+###########################################################################
+# CADENA DE CUSTODIA  (cadena-custodia.py)
+###########################################################################
+
+# Identifica por RUTA ABSOLUTA y SELLA el propio libro (detecta manipulación).
+
+$ python3 cadena-custodia.py add clientes_CONFIDENCIAL.csv --quien "L.F. Arrosquipa" --desc "CSV de clientes (evidencia)"
+$ python3 cadena-custodia.py add c2.log --quien "L.F. Arrosquipa" --desc "Log del servidor C2"
+$ python3 cadena-custodia.py verify clientes_CONFIDENCIAL.csv
+$ python3 cadena-custodia.py sello
+
+[+] Evidencia registrada: clientes_CONFIDENCIAL.csv  (/home/kali/evidencias/clientes_CONFIDENCIAL.csv)
+    SHA-256: 0885eaf506e986518a361fbf0424cc8df62b80aac3bedf0a628c70344aa87cd6
+[+] Evidencia registrada: c2.log  (/home/kali/evidencias/c2.log)
+    SHA-256: d2d1d6dbb0881787ca083498101ac1466cf373d9404a134bd3a45c1d53b4fb8b
+[OK] clientes_CONFIDENCIAL.csv
+    Registrado: 0885eaf506e986518a361fbf0424cc8df62b80aac3bedf0a628c70344aa87cd6
+    Actual:     0885eaf506e986518a361fbf0424cc8df62b80aac3bedf0a628c70344aa87cd6
+    => INTEGRIDAD INTACTA
+[OK] Sello del libro de custodia
+    => LIBRO INTEGRO
+
+
+###########################################################################
+# OSINT DE IOCs  (osint-lookup.py)  —  VirusTotal + AbuseIPDB
+###########################################################################
+
+$ export VT_API_KEY="<REDACTADO>"
+$ export ABUSEIPDB_API_KEY="<REDACTADO>"
+
+# --- Hash SHA-256 capturado por Sysmon (systeminfo.exe) -> VirusTotal ---
+$ python3 osint-lookup.py A220A85750588F5B231FF8CB106BA5409EAABB85E3DD7278A98FCA907E171ED2
+
+[*] IOC: A220A857...E171ED2  ->  tipo detectado: hash
+== VirusTotal ==
+  Detecciones maliciosas: 0/75  (sospechosas: 0)
+  Veredicto: limpio/desconocido
+[+] Consulta OSINT finalizada.
+
+# --- IP pública de ejemplo (valida IP -> AbuseIPDB + VirusTotal) ---
+$ python3 osint-lookup.py 8.8.8.8
+
+[*] IOC: 8.8.8.8  ->  tipo detectado: ip
+== AbuseIPDB ==
+  Puntuacion de abuso: 0%
+  Pais: US  ISP: Google LLC
+  Denuncias totales: 190
+[+] Consulta OSINT finalizada.
 ```
 
 ## Anexo C: configuración de Wazuh (reglas personalizadas)
 
+# Configuración de Wazuh — reglas personalizadas (SRV-SIEM)
+
 Referencia de la configuración del SIEM usada en el apartado 2. Wazuh se instala en modo todo-en-uno sobre la VM `SRV-SIEM` (`10.10.10.20`) y se le añaden reglas propias que convierten la actividad del atacante en alertas con su técnica MITRE asociada.
 
-### 1. Instalación (todo en uno)
+## 1. Instalación (todo en uno)
 
 ```bash
 curl -sO https://packages.wazuh.com/4.9/wazuh-install.sh
@@ -1325,7 +1498,7 @@ sudo bash ./wazuh-install.sh -a -i -o
 
 Al terminar, el instalador muestra el usuario `admin` y su contraseña. El panel queda accesible en `https://10.10.10.20`.
 
-### 2. Reglas personalizadas
+## 2. Reglas personalizadas
 
 Se editan en `/var/ossec/etc/rules/local_rules.xml` del gestor. Combinadas con la telemetría de Sysmon, disparan las alertas visibles en el panel durante la simulación del apartado 3:
 
@@ -1345,7 +1518,7 @@ Se editan en `/var/ossec/etc/rules/local_rules.xml` del gestor. Combinadas con l
     <if_group>sysmon_event1</if_group>
     <field name="win.eventdata.commandLine" type="pcre2">(?i)(Invoke-WebRequest|Compress-Archive|Invoke-RestMethod)</field>
     <description>NEXORA: PowerShell de descarga/exfiltracion</description>
-    <mitre><id>T1059.001</id><id>T1048</id></mitre>
+    <mitre><id>T1059.001</id><id>T1041</id></mitre>
   </rule>
 
   <!-- 100202: conexion saliente a la IP del atacante (C2) -->
@@ -1359,11 +1532,12 @@ Se editan en `/var/ossec/etc/rules/local_rules.xml` del gestor. Combinadas con l
 </group>
 ```
 
-### 3. Aplicar los cambios
+## 3. Aplicar los cambios
 
 ```bash
 sudo systemctl restart wazuh-manager
 ```
+
 ---
 
 ## Conclusiones
@@ -1377,7 +1551,7 @@ Mi principal **conclusión** es que el factor humano es a la vez el eslabón má
 ## Fuentes consultadas
 
 - **Wazuh** — Documentación oficial (instalación *all-in-one*, agentes, reglas locales y SCA): <https://documentation.wazuh.com>
-- **MITRE ATT&CK** — Matriz de técnicas (T1566, T1059, T1071, T1048, T1033, T1087, T1056): <https://attack.mitre.org>
+- **MITRE ATT&CK** — Matriz de técnicas (T1566.002, T1059.001, T1071, T1041, T1033, T1087, T1056.003): <https://attack.mitre.org>
 - **Sysmon (Sysinternals)** — Monitorización de endpoint: <https://learn.microsoft.com/sysinternals/downloads/sysmon>
 - **Configuración de Sysmon (SwiftOnSecurity):** <https://github.com/SwiftOnSecurity/sysmon-config>
 - **GoPhish** — Framework de phishing: <https://getgophish.com/documentation/>
