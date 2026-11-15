@@ -7,7 +7,7 @@
 **Entorno:** Laboratorio virtual aislado (VirtualBox) — pruebas en equipos y redes autorizados
 **Fecha:** noviembre 2026
 
-> **Aviso.** Todo el ataque de este trabajo se reproduce mediante **emulación de adversario** con herramientas legítimas (GoPhish y PowerShell) y **datos ficticios**. En ningún momento se emplea malware real. La empresa «Nexora S.L.» es inventada y el laboratorio está completamente aislado de cualquier red de producción.
+> **Aviso.** Todo el ataque de este trabajo lo reproduje mediante **emulación de adversario** con herramientas legítimas (GoPhish y PowerShell) y **datos ficticios**. En ningún momento usé malware real. La empresa «Nexora S.L.» es inventada y el laboratorio está completamente aislado de cualquier red de producción.
 
 ---
 
@@ -28,15 +28,15 @@
 
 ## Introducción
 
-Este informe documenta, de principio a fin, la **gestión completa de un incidente de ciberseguridad** en una empresa ficticia, Nexora S.L. El escenario parte de un caso realista: un correo de *phishing* que suplanta al departamento de Recursos Humanos consigue robar las credenciales de una empleada, el atacante accede a su equipo, se comunica con un servidor de mando y control (C2) y exfiltra un fichero con datos de clientes.
+En este informe explico, de principio a fin, cómo gestiono un incidente de ciberseguridad en una empresa ficticia, Nexora S.L. El caso es realista: un correo de *phishing* que suplanta a Recursos Humanos roba las credenciales de una empleada, el atacante entra en su equipo, lo controla desde un servidor externo (C2) y se lleva un fichero con datos de clientes.
 
-Para poder estudiarlo de forma práctica y segura, todo el escenario se ha montado en un **laboratorio virtual aislado** y el ataque se ha **emulado** con herramientas legítimas, sin usar software malicioso real. A lo largo del documento se recorren las cinco fases de la gestión de un incidente —prevención, detección, investigación, respuesta y notificación— y se cierra con una simulación de la reunión del equipo de respuesta. Cada fase combina la **parte teórica** (qué se hace y por qué) con la **parte práctica** (capturas reales, resultados y scripts propios desarrollados para el trabajo).
+Para trabajarlo de forma práctica y sin riesgos, monté todo el escenario en un **laboratorio virtual aislado** y **emulé** el ataque con herramientas legítimas, sin usar malware real. A lo largo del documento recorro las cinco fases de la gestión de un incidente —prevención, detección, investigación, respuesta y notificación— y termino con una simulación de la reunión del equipo de respuesta. En cada fase junto la **teoría** (qué hago y por qué) con la **práctica** (capturas reales, resultados y los scripts que he desarrollado).
 
 ## Arquitectura del laboratorio
 
-El laboratorio reproduce una pequeña red corporativa sobre VirtualBox. Todas las máquinas se conectan a una **Red NAT** llamada `nexora-lab`, con el direccionamiento `10.10.10.0/24`. Esta configuración permite que las máquinas se comuniquen entre sí y tengan salida a internet para instalarse, pero mantiene el laboratorio **aislado de la red doméstica**, de modo que ni el ataque ni el tráfico de prueba salen al exterior.
+Para el laboratorio reproduje una pequeña red corporativa sobre VirtualBox. Conecté todas las máquinas a una **Red NAT** llamada `nexora-lab`, con direccionamiento `10.10.10.0/24`. Así se ven entre sí y tienen salida a internet para instalarse, pero el laboratorio queda **aislado de mi red doméstica**: ni el ataque ni el tráfico de prueba salen al exterior.
 
-La red se compone de cinco elementos: un controlador de dominio que gestiona la empresa, un servidor de seguridad donde se centraliza la detección, el equipo de la víctima, la máquina del atacante y la puerta de enlace:
+La red tiene cinco elementos: un controlador de dominio que gestiona la empresa, un servidor donde centralizo la detección, el equipo de la víctima, la máquina del atacante y la puerta de enlace:
 
 | Equipo | Sistema operativo | IP | Rol en el escenario |
 |--------|-------------------|----|---------------------|
@@ -46,7 +46,7 @@ La red se compone de cinco elementos: un controlador de dominio que gestiona la 
 | KALI | Kali Linux | 10.10.10.100 | Atacante: GoPhish, MailHog y servidor C2 |
 | Gateway | — | 10.10.10.1 | Puerta de enlace de la Red NAT |
 
-Antes de empezar se comprobó que la red funcionaba correctamente. Desde el controlador de dominio DC-NEXORA se hizo *ping* a las tres máquinas restantes y todas respondieron **sin pérdida de paquetes**. Un detalle útil para el análisis: el valor **TTL** de las respuestas permite distinguir el sistema operativo del destino, ya que las máquinas Linux responden con TTL 64 y las Windows con TTL 128.
+Antes de empezar comprobé que la red funcionaba. Desde el controlador de dominio DC-NEXORA hice *ping* a las otras tres máquinas y todas respondieron **sin pérdida de paquetes**. Un detalle que me resulta útil para el análisis: el **TTL** de las respuestas delata el sistema operativo del destino, porque las Linux responden con TTL 64 y las Windows con TTL 128.
 
 ![Ping desde DC-NEXORA al resto de VMs del laboratorio](images/01-ping-vms.png)
 
@@ -54,7 +54,7 @@ Antes de empezar se comprobó que la red funcionaba correctamente. Desde el cont
 
 ## 1. Prevención y concienciación
 
-La mejor defensa frente a un incidente es evitar que ocurra. Este primer apartado identifica las amenazas a las que se expone Nexora S.L. y define las medidas de prevención y concienciación que reducen el riesgo.
+La mejor defensa es que el incidente no llegue a ocurrir. En este primer apartado identifico las amenazas a las que se expone Nexora S.L. y planteo las medidas de prevención y concienciación para reducir el riesgo.
 
 ### 1.1 Riesgos y amenazas principales
 
@@ -62,11 +62,11 @@ El principal riesgo es el **phishing y la ingeniería social**: correos que enga
 
 ### 1.2 Normas de seguridad para los puestos
 
-Para reducir esos riesgos se establecen normas básicas en cada puesto de trabajo. Los usuarios deben **bloquear la sesión** al ausentarse y usar **contraseñas robustas** gestionadas por la política de dominio. Se aplica el **principio de mínimo privilegio**: nadie trabaja con permisos de administrador en su equipo. El antivirus/EDR permanece activo, las **macros de Office se deshabilitan** por defecto y las actualizaciones se instalan automáticamente. Por último, se habilita un **canal para reportar correos sospechosos**, de modo que un empleado que dude pueda avisar sin miedo a equivocarse.
+Para reducir esos riesgos propongo unas normas básicas en cada puesto de trabajo. Los usuarios deben **bloquear la sesión** al ausentarse y usar **contraseñas robustas** gestionadas por la política de dominio. Se aplica el **principio de mínimo privilegio**: nadie trabaja con permisos de administrador en su equipo. El antivirus/EDR permanece activo, las **macros de Office se deshabilitan** por defecto y las actualizaciones se instalan automáticamente. Por último, se habilita un **canal para reportar correos sospechosos**, de modo que un empleado que dude pueda avisar sin miedo a equivocarse.
 
 ### 1.3 Plan de formación y concienciación
 
-La concienciación se trabaja con **formación periódica** sobre cómo identificar un phishing y con **simulacros controlados** —como el de este propio trabajo— que permiten medir cuántos empleados pican y mejorar a partir de ahí. Como apoyo visual se elaboraron dos materiales propios: una **guía de buenas prácticas** para el personal y un **cartel recordatorio** para colocar en las zonas de trabajo.
+La concienciación la trabajo con **formación periódica** sobre cómo identificar un phishing y con **simulacros controlados** —como el de este propio trabajo— que me permiten medir cuántos empleados pican y mejorar a partir de ahí. Como apoyo visual preparé dos materiales propios: una **guía de buenas prácticas** para el personal y un **cartel recordatorio** para las zonas de trabajo.
 
 ![Cartel de concienciación antiphishing](apartado1-prevencion/cartel-phishing.png)
 
@@ -121,11 +121,11 @@ La criptografía sostiene buena parte de las medidas de seguridad y, en este tra
 
 ## 2. Detección y auditoría
 
-Detectar a tiempo es lo que separa un susto de un desastre. En este apartado se clasifica el incidente, se identifican los sistemas afectados y se despliega la infraestructura de detección que permitirá, más adelante, ver el ataque en tiempo real.
+Detectar a tiempo es lo que separa un susto de un desastre. En este apartado clasifico el incidente, identifico los sistemas afectados y despliego la infraestructura de detección que luego me deja ver el ataque en tiempo real.
 
 ### 2.1 Clasificación y gravedad
 
-El incidente se clasifica como una **intrusión con acceso no autorizado** originada por phishing:
+Clasifico el incidente como una **intrusión con acceso no autorizado** originada por phishing:
 
 | Campo | Valor |
 |-------|-------|
@@ -141,13 +141,13 @@ El equipo **PC-RRHH-01** es el *paciente cero*: es donde se abre el correo y se 
 
 ### 2.3 Herramientas de detección y registros
 
-La detección se apoya en varias herramientas complementarias: **Wazuh** como SIEM central que recoge y correla los eventos, **Sysmon** para obtener telemetría detallada del endpoint, **Wireshark** para inspeccionar el tráfico y el **Visor de eventos** y el **MITRE ATT&CK Navigator** como apoyo al análisis.
+Para la detección me apoyo en varias herramientas complementarias: **Wazuh** como SIEM central que recoge y correla los eventos, **Sysmon** para la telemetría detallada del endpoint, **Wireshark** para inspeccionar el tráfico, y el **Visor de eventos** y el **MITRE ATT&CK Navigator** como apoyo al análisis.
 
-Las fuentes de registro que se vigilan son las que cuentan la historia del ataque: los **logs del antivirus** (Defender) y del **firewall**, los **eventos del sistema operativo** (inicios de sesión 4624/4625 y creación de procesos 4688), la **telemetría de Sysmon** (procesos, conexiones de red y cambios en ficheros) y el **tráfico de red**, donde se observan el *beacon* periódico hacia el C2 y la exfiltración.
+Las fuentes de registro que vigilo son las que cuentan la historia del ataque: los **logs del antivirus** (Defender) y del **firewall**, los **eventos del sistema operativo** (inicios de sesión 4624/4625 y creación de procesos 4688), la **telemetría de Sysmon** (procesos, conexiones de red y cambios en ficheros) y el **tráfico de red**, donde se observan el *beacon* periódico hacia el C2 y la exfiltración.
 
 ### 2.4 Despliegue de la detección
 
-Sobre el servidor SRV-SIEM se instaló **Wazuh 4.9.2** en modo todo-en-uno (indexador, gestor y panel), accesible en `https://10.10.10.20`. En el equipo de la víctima se desplegó el **agente de Wazuh junto con Sysmon**, de modo que cada proceso, conexión o cambio en el sistema se envía al SIEM para su análisis. El agente quedó conectado y reportando correctamente.
+Sobre el servidor SRV-SIEM instalé **Wazuh 4.9.2** en modo todo-en-uno (indexador, gestor y panel), accesible en `https://10.10.10.20`. En el equipo de la víctima desplegué el **agente de Wazuh junto con Sysmon**, de modo que cada proceso, conexión o cambio en el sistema llega al SIEM para su análisis. El agente quedó conectado y reportando correctamente.
 
 ![Panel de acceso de Wazuh (SIEM central en SRV-SIEM)](images/02-wazuh-login.png)
 
@@ -155,17 +155,17 @@ Una vez instalado, el agente de la víctima aparece en estado **Active** en la c
 
 ![Agente PC-RRHH-01 en estado Active en Wazuh](images/02-wazuh-agente-activo.png)
 
-Desde el panel del agente se consultan el resumen de eventos, el mapeo automático con **MITRE ATT&CK** y el resultado del escaneo de configuración de seguridad (SCA). Este escaneo evaluó el equipo frente al *benchmark* **CIS Microsoft Windows 11** y obtuvo 114 comprobaciones superadas y 273 fallidas (un 29 % de cumplimiento), lo que da una idea realista del estado de endurecimiento de un equipo recién instalado:
+Desde el panel del agente consulto el resumen de eventos, el mapeo automático con **MITRE ATT&CK** y el resultado del escaneo de configuración de seguridad (SCA). Ese escaneo evaluó el equipo frente al *benchmark* **CIS Microsoft Windows 11** y me dio 114 comprobaciones superadas y 273 fallidas (un 29 % de cumplimiento), una idea realista del estado de endurecimiento de un equipo recién instalado:
 
 ![Dashboard del agente PC-RRHH-01 en Wazuh](images/02-wazuh-dashboard-agente.png)
 
 ### 2.5 OSINT de IPs, dominios y hashes
 
-Como complemento a la detección interna, los indicadores observados (direcciones IP, dominios y hashes de ficheros) se contrastan con fuentes de inteligencia abiertas (OSINT) mediante **VirusTotal** y **AbuseIPDB**. Este proceso se automatiza con un script propio que se describe en el apartado 3.
+Como complemento a la detección interna, contrasto los indicadores observados (direcciones IP, dominios y hashes de ficheros) con fuentes de inteligencia abiertas (OSINT): **VirusTotal** y **AbuseIPDB**. Lo automatizo con un script propio que explico en el apartado 3.
 
 ### 2.6 Ficha de registro del incidente
 
-Toda la información anterior se consolida en una ficha que acompaña al incidente durante toda su gestión y sirve de referencia para el equipo:
+Consolido toda la información anterior en una ficha que acompaña al incidente durante toda su gestión y me sirve de referencia:
 
 | Campo | Contenido |
 |-------|-----------|
@@ -187,15 +187,15 @@ Toda la información anterior se consolida en una ficha que acompaña al inciden
 
 ## 3. Investigación y análisis
 
-Este apartado es el núcleo práctico del trabajo: se reproduce el ataque completo paso a paso y, acto seguido, se investiga como lo haría un analista, preservando las evidencias y apoyándose en scripts propios.
+Este es el núcleo práctico del trabajo: reproduzco el ataque completo paso a paso y, acto seguido, lo investigo como lo haría un analista, preservando las evidencias y apoyándome en mis propios scripts.
 
 ### 3.1 Reproducción del ataque (emulación de adversario)
 
-El ataque se reproduce en dos fases encadenadas. Primero, una campaña de **phishing** montada con GoPhish y MailHog: un correo que suplanta a RR. HH. lleva a la víctima a un portal falso donde entrega sus credenciales. Después, una fase de **ejecución y post-explotación** simulada con PowerShell (`emular-ataque.ps1`): reconocimiento del sistema, acceso al CSV de clientes, comunicación periódica con el C2 y exfiltración del fichero.
+Reproduzco el ataque en dos fases encadenadas. Primero monto una campaña de **phishing** con GoPhish y MailHog: un correo que suplanta a RR. HH. lleva a la víctima a un portal falso donde entrega sus credenciales. Después simulo con PowerShell (`emular-ataque.ps1`) la fase de **ejecución y post-explotación**: reconocimiento del sistema, acceso al CSV de clientes, comunicación periódica con el C2 y exfiltración del fichero.
 
 #### Construcción de la campaña de phishing (GoPhish)
 
-GoPhish organiza una campaña en cuatro piezas. La primera es el **perfil de envío** (*Sending Profile*), que define el servidor de correo saliente; en el laboratorio apunta a MailHog, que actúa como *buzón trampa* y evita que ningún correo salga a internet real:
+Monto la campaña en GoPhish con cuatro piezas. La primera es el **perfil de envío** (*Sending Profile*), que define el servidor de correo saliente; lo apunto a MailHog, que actúa como *buzón trampa* y evita que ningún correo salga a internet real:
 
 ![Perfil de envío (Sending Profile) de GoPhish](images/03-gophish-sending-profile.png)
 
@@ -217,7 +217,7 @@ Lanzada la campaña, el correo sale de GoPhish y lo recoge **MailHog**, el buzó
 
 ![Bandeja de MailHog con los correos de phishing entregados](images/03-mailhog-bandeja.png)
 
-Abierto el correo, se ve el señuelo tal y como lo recibe la víctima: un mensaje HTML que imita a RR. HH. de Nexora, con un **pretexto de urgencia** (verificar las credenciales antes del 30 de noviembre o la cuenta quedará «suspendida»), la firma de una técnica inventada y un botón **«Verificar mi cuenta»** que enlaza al portal falso (`http://10.10.10.100?rid=...`). Es un ejemplo de manual de ingeniería social: autoridad, urgencia y miedo a perder el acceso.
+Si abro el correo, veo el señuelo tal y como le llega a la víctima: un mensaje HTML que imita a RR. HH. de Nexora, con un **pretexto de urgencia** (verificar las credenciales antes del 30 de noviembre o la cuenta quedará «suspendida»), la firma de una técnica inventada y un botón **«Verificar mi cuenta»** que enlaza al portal falso (`http://10.10.10.100?rid=...`). Es un ejemplo de manual de ingeniería social: autoridad, urgencia y miedo a perder el acceso.
 
 ![Correo de phishing abierto en MailHog, suplantando a RR. HH.](images/03-mailhog-correo.png)
 
@@ -248,7 +248,7 @@ A nivel de campaña, el panel de GoPhish resume el éxito del simulacro (*Phishi
 
 Las **evidencias que procede recopilar** en este incidente son: el **correo de phishing** con sus cabeceras, la **configuración y la base de datos de GoPhish** (`config.json`, `gophish.db`), el **registro del servidor C2**, el **CSV de clientes** exfiltrado, la **telemetría de Sysmon** y las **alertas de Wazuh**, y los **artefactos volátiles del equipo víctima** (procesos, conexiones de red y tareas programadas recogidos por el script de respuesta).
 
-Antes de analizar nada, hay que garantizar que esas evidencias no se alteran. Para ello se sella cada fichero con su huella **SHA-256**. El script propio `generar-iocs.py` calcula los hashes de toda la campaña (se procesaron **306 ficheros**) y produce las tablas de indicadores `iocs.csv` e `iocs.md`. Además, el script `cadena-custodia.py` lleva un **libro de cadena de custodia** que anota quién recogió cada evidencia, cuándo y con qué hash, y permite reverificar en cualquier momento que no se ha modificado. En la práctica se registraron como evidencia la configuración y la base de datos de la campaña (`config.json` y `gophish.db`) y se comprobó su integridad con resultado correcto (salidas reales en `scripts/salidas-scripts.txt`):
+Antes de analizar nada tengo que garantizar que esas evidencias no se alteran, así que sello cada fichero con su huella **SHA-256**. Mi script `generar-iocs.py` calcula los hashes de toda la campaña (procesé **306 ficheros**) y genera las tablas de indicadores `iocs.csv` e `iocs.md`. Además, con `cadena-custodia.py` llevo un **libro de cadena de custodia** que anota quién recogió cada evidencia, cuándo y con qué hash, y me deja reverificar en cualquier momento que no se ha tocado. En la práctica registré como evidencia la configuración y la base de datos de la campaña (`config.json` y `gophish.db`) y comprobé su integridad con resultado correcto (salidas reales en `scripts/salidas-scripts.txt`):
 
 ```
 [+] Evidencia registrada: config.json
@@ -261,13 +261,13 @@ Antes de analizar nada, hay que garantizar que esas evidencias no se alteran. Pa
 
 ### 3.3 Análisis de un binario por su hash
 
-Durante la ejecución, Sysmon capturó el hash SHA-256 del proceso lanzado (`systeminfo.exe`). Consultado en VirusTotal, devolvió **0 detecciones sobre 75 motores**, lo que lo identifica como un binario legítimo de Microsoft. Este paso ilustra cómo se verifica la reputación de un fichero por su huella sin necesidad de tenerlo delante.
+Durante la ejecución, Sysmon capturó el hash SHA-256 del proceso lanzado (`systeminfo.exe`). Lo consulté en VirusTotal y devolvió **0 detecciones sobre 75 motores**, así que es un binario legítimo de Microsoft. Con esto verifico la reputación de un fichero por su huella sin necesidad de tenerlo delante.
 
-El script `osint-lookup.py` automatiza esta consulta: detecta si el indicador es una IP, un dominio o un hash y pregunta a **VirusTotal** y **AbuseIPDB**. Para validar su funcionamiento se probó también con una IP pública conocida (8.8.8.8, de Google), que AbuseIPDB reporta con un 0 % de abuso. Las salidas completas están en `scripts/salidas-scripts.txt`.
+Mi script `osint-lookup.py` me automatiza esta consulta: detecta si el indicador es una IP, un dominio o un hash y pregunta a **VirusTotal** y **AbuseIPDB**. Para validarlo lo probé también con una IP pública conocida (8.8.8.8, de Google), que AbuseIPDB reporta con un 0 % de abuso. Las salidas completas están en `scripts/salidas-scripts.txt`.
 
 ### 3.4 Análisis de las conexiones sospechosas
 
-Para estudiar la comunicación con el atacante se desarrolló `analizar-conexiones.py`, que procesa el registro del servidor C2 y clasifica cada petición. El análisis confirmó el patrón característico de un mando y control: **cuatro conexiones periódicas de tipo *beacon*** y **una petición POST de exfiltración** con el CSV de clientes, todas desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
+Para estudiar la comunicación con el atacante escribí `analizar-conexiones.py`, que procesa el registro del servidor C2 y clasifica cada petición. El análisis confirmó el patrón característico de un mando y control: **cuatro conexiones periódicas de tipo *beacon*** y **una petición POST de exfiltración** con el CSV de clientes, todas desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
 
 ```
 Beacon / C2: 4 peticiones GET /beacon  (patrón periódico = C2)
@@ -278,7 +278,7 @@ Técnicas: C2 (T1071) y exfiltración (T1048)
 
 ### 3.5 Detección correlada en Wazuh
 
-Todo lo anterior se observa, en paralelo, desde el SIEM. Para ello se escribieron **reglas personalizadas** (`local_rules.xml`) que, combinadas con la telemetría de Sysmon, convierten la actividad del atacante en alertas con su nivel de severidad y su técnica MITRE asociada:
+Todo lo anterior lo observo, en paralelo, desde el SIEM. Para ello escribí **reglas personalizadas** (`local_rules.xml`) que, con la telemetría de Sysmon, convierten la actividad del atacante en alertas con su nivel de severidad y su técnica MITRE asociada:
 
 | ID de regla | Descripción | Nivel | MITRE |
 |-------------|-------------|-------|-------|
@@ -303,7 +303,7 @@ Confirmado el incidente, el objetivo es **contener, erradicar y recuperar** con 
 5. **Recuperación** del equipo a partir de un *snapshot* limpio anterior al incidente.
 6. **Medidas preventivas** para que no se repita: formación, MFA, bloqueo de macros y nuevas reglas en Wazuh.
 
-Para ejecutar los primeros pasos de forma ordenada y, sobre todo, **trazable**, se desarrolló el script propio `respuesta-aislar.ps1`. Su diseño respeta el **orden de volatilidad**: primero recoge la evidencia que se perdería al apagar o aislar el equipo (conexiones de red activas —resaltando las dirigidas al atacante—, procesos en ejecución, sesiones abiertas, tareas programadas que delaten persistencia, caché ARP y tabla de rutas) y solo después bloquea al atacante en el firewall y deshabilita los adaptadores de red. Al terminar, **sella toda la evidencia recogida con SHA-256** (`SHA256SUMS.txt`) y deja un registro con marcas de tiempo (`respuesta.log`), de modo que la actuación quede documentada para la cadena de custodia. Se ejecuta así:
+Para ejecutar los primeros pasos de forma ordenada y, sobre todo, **trazable**, escribí el script `respuesta-aislar.ps1`. Lo diseñé respetando el **orden de volatilidad**: primero recojo la evidencia que se perdería al apagar o aislar el equipo (conexiones de red activas —resaltando las dirigidas al atacante—, procesos en ejecución, sesiones abiertas, tareas programadas que delaten persistencia, caché ARP y tabla de rutas) y solo después bloqueo al atacante en el firewall y deshabilito los adaptadores de red. Al terminar, **sello toda la evidencia recogida con SHA-256** (`SHA256SUMS.txt`) y dejo un registro con marcas de tiempo (`respuesta.log`), para que la actuación quede documentada en la cadena de custodia. Se ejecuta así:
 
 ```powershell
 .\respuesta-aislar.ps1 -IPAtacante 10.10.10.100
@@ -315,7 +315,7 @@ Más allá de la respuesta inmediata, el caso se enmarca en la **ciberresilienci
 
 ## 5. Notificación y organismos de respuesta
 
-Un incidente con datos personales no termina en lo técnico: conlleva obligaciones de comunicación. En el plano interno, se traslada el incidente a la dirección y se avisa a los empleados con un mensaje claro y sin alarmismo. Un **modelo de comunicación interna** para los empleados sería:
+Un incidente con datos personales no termina en lo técnico: conlleva obligaciones de comunicación. En el plano interno informo a la dirección y aviso a los empleados con un mensaje claro y sin alarmismo. Un **modelo de comunicación interna** para los empleados sería:
 
 > **Asunto:** Aviso de seguridad — no interactúe con el correo de «Recursos Humanos»
 >
@@ -340,7 +340,7 @@ A escala internacional existen además referencias como **ENISA** (Agencia de la
 
 ## 6. Simulación de la reunión del equipo de respuesta
 
-Para cerrar el ciclo se simula una **reunión de crisis del equipo de respuesta** (CSIRT interno), con roles definidos —coordinador del incidente, analista/forense, administrador de sistemas, responsable de protección de datos (DPO) y dirección—. La reunión aborda las cuatro circunstancias planteadas en el enunciado y justifica la decisión tomada en cada una:
+Para cerrar el ciclo simulo una **reunión de crisis del equipo de respuesta** (CSIRT interno), con roles definidos —coordinador del incidente, analista/forense, administrador de sistemas, responsable de protección de datos (DPO) y dirección—. En la reunión abordo las cuatro circunstancias del enunciado y justifico la decisión en cada una:
 
 | Circunstancia | Decisión | Justificación (resumen) |
 |---------------|----------|-------------------------|
@@ -1368,11 +1368,11 @@ sudo systemctl restart wazuh-manager
 
 ## Conclusiones
 
-Este trabajo ha recorrido el **ciclo completo de gestión de un incidente** sobre un laboratorio realista y con datos ficticios, uniendo la teoría del módulo con una ejecución práctica de principio a fin.
+En este trabajo he recorrido el **ciclo completo de gestión de un incidente** sobre un laboratorio realista y con datos ficticios, uniendo la teoría del módulo con una ejecución práctica de principio a fin.
 
-En **prevención** se identificaron los riesgos y se crearon materiales de concienciación propios; el propio simulacro aportó una métrica contundente, ya que los dos empleados objetivo abrieron el correo y uno entregó sus credenciales, lo que demuestra por qué la formación es la primera barrera. En **detección**, un SIEM (Wazuh) alimentado por Sysmon y con reglas propias mapeadas a MITRE ATT&CK convirtió la actividad del sistema en alertas accionables con detalle forense. En **investigación**, el ataque se reprodujo por emulación —sin malware real— y se analizó con scripts propios que cubren la integridad de las evidencias, la cadena de custodia, el análisis de las conexiones C2 y la reputación OSINT de los indicadores. En **respuesta**, se automatizó la contención respetando el orden de volatilidad y se definió una erradicación fiable por restauración y revocación de credenciales. Y en **notificación**, se aplicó el marco legal (AEPD, 72 horas) y se identificaron los organismos de apoyo.
+En **prevención** identifiqué los riesgos y creé materiales de concienciación propios; el simulacro me dio una métrica contundente, porque los dos empleados objetivo abrieron el correo y uno entregó sus credenciales, lo que demuestra por qué la formación es la primera barrera. En **detección** monté un SIEM (Wazuh) con Sysmon y reglas propias mapeadas a MITRE ATT&CK, y convertí la actividad del sistema en alertas accionables con detalle forense. En **investigación** reproduje el ataque por emulación —sin malware real— y lo analicé con scripts propios que cubren la integridad de las evidencias, la cadena de custodia, el análisis de las conexiones C2 y la reputación OSINT de los indicadores. En **respuesta** automaticé la contención respetando el orden de volatilidad y definí una erradicación fiable por restauración y revocación de credenciales. Y en **notificación** apliqué el marco legal (AEPD, 72 horas) e identifiqué los organismos de apoyo.
 
-La principal **lección aprendida** es que el factor humano es a la vez el eslabón más débil y el más rentable de reforzar; que la detección temprana exige tener telemetría y correlación preparadas *antes* del incidente; y que la trazabilidad de la evidencia (hash y cadena de custodia) es lo que convierte una respuesta improvisada en una respuesta defendible. Como mejoras, se proponen MFA, mínimo privilegio, bloqueo de macros, segmentación de red y un afinado continuo de las reglas del SIEM.
+Mi principal **conclusión** es que el factor humano es a la vez el eslabón más débil y el más rentable de reforzar; que la detección temprana exige tener la telemetría y la correlación preparadas *antes* del incidente; y que la trazabilidad de la evidencia (hash y cadena de custodia) es lo que convierte una respuesta improvisada en una respuesta defendible. Como mejoras propongo MFA, mínimo privilegio, bloqueo de macros, segmentación de red y un afinado continuo de las reglas del SIEM.
 
 ## Fuentes consultadas
 
