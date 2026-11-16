@@ -34,7 +34,7 @@ Para trabajarlo de forma práctica y sin riesgos, monté todo el escenario en un
 
 ## Arquitectura del laboratorio
 
-Para el laboratorio reproduje una pequeña red corporativa sobre VirtualBox. Conecté todas las máquinas a una **Red NAT** llamada `nexora-lab`, con direccionamiento `10.10.10.0/24`. Esa Red NAT da a las VMs **salida a internet** únicamente para instalarse y actualizarse, y hace que el laboratorio **no sea accesible desde mi red doméstica**. El ataque, en cambio, es **interno**: la víctima (10.10.10.50) y el atacante (10.10.10.100) están en la misma red, así que el *beacon*, el C2 y la exfiltración ocurren **entre máquinas del propio laboratorio** y no viajan a internet.
+Para el laboratorio reproduje una pequeña red corporativa sobre VirtualBox. Conecté todas las máquinas a una **Red NAT** llamada `nexora-lab`, con direccionamiento `10.10.10.0/24`. Esa Red NAT da a las VMs **salida a internet** —que uso solo para instalarlas y actualizarlas; no he restringido explícitamente el tráfico de salida más allá de ese uso— y hace que el laboratorio **no sea accesible desde mi red doméstica**. El ataque, en cambio, es **interno**: la víctima (10.10.10.50) y el atacante (10.10.10.100) están en la misma red, así que el *beacon*, el C2 y la exfiltración ocurren **entre máquinas del propio laboratorio** y no viajan a internet.
 
 La red tiene cinco elementos: un controlador de dominio que gestiona la empresa, un servidor donde centralizo la detección, el equipo de la víctima, la máquina del atacante y la puerta de enlace:
 
@@ -252,7 +252,7 @@ A nivel de campaña, el panel de GoPhish resume el éxito del simulacro (*Phishi
 
 Las **evidencias que procede recopilar** en este incidente son: el **correo de phishing** con sus cabeceras, la **configuración y la base de datos de GoPhish** (`config.json`, `gophish.db`), el **registro del servidor C2**, el **CSV de clientes** exfiltrado, la **telemetría de Sysmon** y las **alertas de Wazuh**, y los **artefactos volátiles del equipo víctima** (procesos, conexiones de red y tareas programadas recogidos por el script de respuesta).
 
-Antes de analizar nada tengo que garantizar que esas evidencias no se alteran, así que sello cada fichero con su huella **SHA-256**. Mi script `generar-iocs.py` calcula los hashes de toda la campaña (procesé **306 ficheros**) y genera las tablas de indicadores `iocs.csv` e `iocs.md`. Además, con `cadena-custodia.py` llevo un **libro de cadena de custodia** que anota quién recogió cada evidencia, cuándo y con qué hash, identificándola por su **ruta absoluta** (para no confundir ficheros con el mismo nombre). El propio libro se **sella** con su hash, así que también detecto si alguien manipula el registro. Puedo reverificar en cualquier momento que una evidencia no se ha tocado. En la práctica registré como evidencia la configuración y la base de datos de la campaña (`config.json` y `gophish.db`) y comprobé su integridad con resultado correcto (salidas reales en `scripts/salidas-scripts.txt`):
+Antes de analizar nada tengo que garantizar que esas evidencias no se alteran, así que sello cada fichero con su huella **SHA-256**. Mi script `generar-iocs.py` calcula los hashes de toda la campaña (procesé **306 ficheros**) y genera las tablas de indicadores `iocs.csv` e `iocs.md` (uso **SHA-256** como huella principal; el MD5 que también calculo queda solo como referencia secundaria). Además, con `cadena-custodia.py` llevo un **libro de cadena de custodia** que anota quién recogió cada evidencia, cuándo y con qué hash, identificándola por su **ruta absoluta** (para no confundir ficheros con el mismo nombre). El propio libro se **sella** con su hash, así que también detecto si alguien manipula el registro. Puedo reverificar en cualquier momento que una evidencia no se ha tocado. (En un caso real, ese sello y el libro deberían guardarse además en un **almacenamiento separado** —soporte de solo lectura o un sistema distinto— para que quien comprometa el equipo no pueda alterar a la vez la evidencia y su sello.) En la práctica registré como evidencia la configuración y la base de datos de la campaña (`config.json` y `gophish.db`) y comprobé su integridad con resultado correcto (salidas reales en `scripts/salidas-scripts.txt`):
 
 ```
 [+] Evidencia registrada: config.json
@@ -273,7 +273,7 @@ Para completar el OSINT incorporo también **Shodan**, que sirve para otra cosa 
 
 ### 3.4 Análisis de las conexiones sospechosas
 
-Para estudiar la comunicación con el atacante monté un **servidor C2 propio** (`c2-server.py`) que, a diferencia de `python3 -m http.server`, **recibe y guarda en disco** el fichero que se le envía y registra los **bytes** de cada POST. Sobre ese log, mi script `analizar-conexiones.py` separa los *beacon* de la exfiltración, comprueba que las conexiones se dirigen al atacante y **suma los bytes realmente recibidos** —que es lo que confirma la exfiltración, no la simple existencia de la petición—. El resultado: **cuatro *beacon* periódicos** y **un POST de 148 bytes recibido y almacenado** en el C2, desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
+Para estudiar la comunicación con el atacante monté un **servidor C2 propio** (`c2-server.py`) que, a diferencia de `python3 -m http.server`, **recibe y guarda en disco** el fichero que se le envía y registra los **bytes** de cada POST. Sobre ese log, mi script `analizar-conexiones.py` separa los *beacon* de la exfiltración, identifica el origen de cada petición (el log es el del propio servidor C2, así que todo lo que aparece son peticiones **recibidas** por el atacante) y **suma los bytes realmente recibidos** —que es lo que confirma la exfiltración, no la simple existencia de la petición—. El resultado: **cuatro *beacon* periódicos** y **un POST de 148 bytes recibido y almacenado** en el C2, desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
 
 ```
 === Exfiltracion de datos (POST recibidos) ===
@@ -316,7 +316,7 @@ Un matiz importante para no sobreinterpretar las reglas: la **100201** detecta e
 
 El phishing no roba credenciales por capricho: el objetivo es **reutilizarlas para avanzar por el dominio**. Para demostrarlo, con el script `movimiento-lateral.ps1` reutilizo las credenciales de dominio de la cuenta comprometida `rrhh.ana` desde PC-RRHH-01 para **autenticarme contra el controlador de dominio DC-NEXORA** mediante `net use` sobre su recurso administrativo. No hace falta malware: basta una credencial válida y herramientas nativas de Windows.
 
-Conviene separar dos cosas que no son lo mismo. Lo que esto demuestra es una **autenticación de red satisfactoria**: en el DC queda un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` con origen la IP de la víctima (10.10.10.50), y con esa sesión **enumeré recursos del dominio** (`net view` devolvió `NETLOGON` y `SYSVOL`). Eso ya prueba la reutilización de credenciales válidas, **T1078** (*Valid Accounts*). Cosa distinta es el **acceso efectivo a un recurso administrativo**: al intentar leer `\\DC-NEXORA\C$`, el acceso depende de privilegios y, como `rrhh.ana` es una cuenta de dominio **sin derechos de administrador**, se **deniega**. Dicho de otro modo, autenticarse no equivale a tener acceso privilegiado; la técnica **T1021.002** (*SMB/Windows Admin Shares*) queda aquí a nivel de **sesión SMB autenticada y enumeración**, no de acceso efectivo al administrativo.
+Conviene separar dos cosas que no son lo mismo. Lo que esto demuestra es una **autenticación de red satisfactoria**: en el DC queda un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` con origen la IP de la víctima (10.10.10.50), y con esa sesión **enumeré recursos del dominio** (`net view` devolvió `NETLOGON` y `SYSVOL`). Eso ya prueba la reutilización de credenciales válidas, **T1078** (*Valid Accounts*). Cosa distinta es el **acceso efectivo a un recurso administrativo**: al intentar leer `\\DC-NEXORA\C$`, el acceso depende de privilegios y, como `rrhh.ana` es una cuenta de dominio **sin derechos de administrador**, se **deniega**. Dicho de otro modo, autenticarse no equivale a tener acceso privilegiado; la técnica **T1021.002** (*SMB/Windows Admin Shares*) **sí se ejerce** a nivel de **sesión SMB autenticada sobre `IPC$`** —que MITRE incluye entre los recursos administrativos de esta técnica— y de enumeración del dominio, pero **no** llega a acceso efectivo a `C$` ni a ejecución remota.
 
 > **Sobre la detección en Wazuh.** Desplegué el agente de Wazuh **también en DC-NEXORA**, de modo que el controlador de dominio reenvía su canal *Security* al SIEM. Así, el 4624 de `rrhh.ana` no se queda solo en el registro local del DC: queda **centralizado y es visible en el propio SIEM** (vista *Discover* de Wazuh), como muestro más abajo. La **regla 100203** queda definida para elevar esa correlación a una alerta de nivel 12 con nombre propio; en este trabajo dejo documentado el evento ya recibido y consultable en Wazuh.
 
@@ -351,7 +351,7 @@ Un análisis honesto separa lo demostrado de lo que son hipótesis:
 - **Confirmado por evidencias:** el robo de credenciales (GoPhish), el reconocimiento en la víctima (Sysmon/Wazuh), la **exfiltración del CSV** (recibido y almacenado por el C2, confirmado en claro con Wireshark) y la **autenticación de red contra el DC** con las credenciales robadas (evento 4624 + enumeración con `net view`).
 - **Lo que NO se demostró (y no debe afirmarse):** el acceso al recurso administrativo `C$` se intentó pero quedó **denegado** (la cuenta no es administradora), así que **no hubo acceso privilegiado efectivo**; tampoco se observó **persistencia** (no apareció una tarea programada maliciosa) ni se determinó el alcance real de los datos más allá del CSV de prueba.
 - **Detección en el DC:** desplegué el agente de Wazuh en DC-NEXORA, así que el 4624 de `rrhh.ana` no solo queda en el registro local del DC, sino **centralizado y consultable en el SIEM** (apartado 3.6). La regla **100203** queda definida para convertir ese evento en una alerta con nombre propio; su disparo automático depende de afinar el *decoder* de `windows_eventchannel` en el gestor, un ajuste fino que dejo como mejora —el evento que alimentaría la alerta ya está, demostrado, dentro de Wazuh.
-- **Registros que faltarían en un caso real:** una captura de tráfico de mayor duración para estudiar el comportamiento del C2 a lo largo del tiempo (la exfiltración puntual sí quedó capturada byte a byte con Wireshark, apartado 3.4) y la telemetría del propio DC en el SIEM.
+- **Mejoras adicionales:** ampliar la captura de tráfico para estudiar el comportamiento del C2 durante un periodo más prolongado y correlacionar otros eventos de acceso a recursos compartidos (la exfiltración puntual sí quedó capturada byte a byte con Wireshark, apartado 3.4). La telemetría del propio DC **ya está centralizada y es consultable en el SIEM** (apartado 3.6).
 - **Investigación adicional recomendada:** revisar otras cuentas con inicio de sesión en los equipos afectados (eventos 4624 en todo el dominio), buscar reutilización de la credencial en otros servicios y analizar en *sandbox* cualquier binario o adjunto sospechoso.
 
 ---
@@ -437,7 +437,7 @@ Para cerrar el ciclo simulo una **reunión de crisis del equipo de respuesta** (
 | Circunstancia | Decisión | Justificación (resumen) |
 |---------------|----------|-------------------------|
 | **Aparece un segundo equipo infectado** | Elevar la gravedad a CRÍTICA, aislarlo también y revisar los inicios de sesión (evento 4624) | Indica movimiento lateral; hay que contener antes de que se extienda |
-| **Indicios claros de exfiltración** | El DPO activa el procedimiento de brecha y se prepara la notificación a la **AEPD en 72 h** | La obligación legal corre desde el conocimiento, al margen de lo técnico |
+| **Indicios claros de exfiltración** | El DPO activa el procedimiento de brecha y, al existir riesgo para los afectados, se prepara la notificación a la **AEPD en 72 h** | La obligación de notificar surge cuando hay riesgo para los derechos de las personas; el plazo corre desde el conocimiento |
 | **El atacante mantiene acceso persistente** | Restaurar desde un *snapshot* limpio y revocar las credenciales en el AD | Una limpieza manual no garantiza erradicar al atacante |
 | **Presión de dirección por recuperar servicios** | Recuperación **por fases**, reconectando primero lo ya verificado, con MFA y macros bloqueadas | Equilibra la continuidad del negocio y la seguridad sin reabrir el incidente |
 
@@ -818,8 +818,10 @@ Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -Foregroun
  credenciales de dominio de la cuenta comprometida en el phishing (rrhh.ana) para
  autenticarse desde PC-RRHH-01 contra el controlador de dominio
  DC-NEXORA. Esto genera en el DC un inicio de sesion 4624 (tipo 3,
- por red) a nombre de rrhh.ana y con origen la IP de la victima, que
- Wazuh detecta con la regla 100203.
+ por red) a nombre de rrhh.ana y con origen la IP de la victima
+ (10.10.10.50). La regla 100203 esta pensada para correlacionar ese
+ evento; su disparo automatico como alerta requiere afinar el decoder
+ en el gestor (ver apartado 3.8).
 
  NO es malware: usa herramientas nativas de Windows (net use / net view).
  MITRE: T1078 (Valid Accounts) + T1021.002 (SMB/Windows Admin Shares).
@@ -1331,8 +1333,11 @@ Apartado 3: Investigacion y analisis.
 Lee el log del servidor C2 (`c2-server.py`, que registra tambien los
 BYTES recibidos en cada POST) y:
   - Separa beacon (GET) de exfiltracion (POST).
-  - Valida que las peticiones se dirijan a la IP del atacante
-    (parametro --atacante) y descarta el resto.
+  - Identifica el ORIGEN de cada peticion (la IP del cliente que se
+    conecto al C2). Como el log es el del PROPIO servidor C2, el destino
+    es implicito: todo lo que figura en el log son peticiones que RECIBIO
+    el atacante; el parametro --atacante solo descarta la linea interna
+    del propio servidor.
   - Suma los BYTES realmente recibidos en los POST: eso es lo que
     confirma la exfiltracion, no la mera existencia de la peticion.
 
@@ -1704,13 +1709,17 @@ Se editan en `/var/ossec/etc/rules/local_rules.xml` del gestor. Combinadas con l
   <!-- 100203: movimiento lateral - credenciales robadas usadas contra el DC -->
   <!-- Requiere que DC-NEXORA tenga agente Wazuh enviando su canal Security.  -->
   <!-- Se encadena por decoder (windows_eventchannel), no por if_group, que es -->
-  <!-- lo que casa con los eventos del canal Security de Windows en Wazuh 4.x. -->
+  <!-- lo que casa con los eventos del canal Security de Windows en Wazuh 4.x.  -->
+  <!-- Se restringe al origen 10.10.10.50 (la victima) para no confundirlo con -->
+  <!-- otros inicios de sesion de red de la misma cuenta. El evento proviene    -->
+  <!-- del canal Security del agente de DC-NEXORA.                              -->
   <rule id="100203" level="12">
     <decoded_as>windows_eventchannel</decoded_as>
     <field name="win.system.eventID">^4624$</field>
     <field name="win.eventdata.logonType">^3$</field>
     <field name="win.eventdata.targetUserName">rrhh.ana</field>
-    <description>NEXORA: Movimiento lateral - login de rrhh.ana (tipo 3, por red) hacia el DC</description>
+    <field name="win.eventdata.ipAddress">10.10.10.50</field>
+    <description>NEXORA: Movimiento lateral - login de rrhh.ana (tipo 3) desde la victima (10.10.10.50) hacia el DC</description>
     <mitre><id>T1078</id><id>T1021.002</id></mitre>
   </rule>
 
