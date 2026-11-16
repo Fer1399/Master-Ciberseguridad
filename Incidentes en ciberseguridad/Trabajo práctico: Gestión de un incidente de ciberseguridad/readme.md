@@ -40,7 +40,7 @@ La red tiene cinco elementos: un controlador de dominio que gestiona la empresa,
 
 | Equipo | Sistema operativo | IP | Rol en el escenario |
 |--------|-------------------|----|---------------------|
-| DC-NEXORA | Windows Server 2025 | 10.10.10.10 | Controlador de dominio `nexora.lab` + DNS |
+| DC-NEXORA | Windows Server 2025 | 10.10.10.10 | Controlador de dominio `nexora.lab` + DNS + agente Wazuh |
 | SRV-SIEM | Ubuntu Server 26.04 | 10.10.10.20 | SIEM (Wazuh): detección y análisis central |
 | PC-RRHH-01 | Windows 11 | 10.10.10.50 | Víctima: equipo de RRHH con Sysmon + agente Wazuh |
 | KALI | Kali Linux | 10.10.10.100 | Atacante: GoPhish, MailHog y servidor C2 |
@@ -314,7 +314,7 @@ El phishing no roba credenciales por capricho: el objetivo es **reutilizarlas pa
 
 Conviene separar dos cosas que no son lo mismo. Lo que esto demuestra es una **autenticación de red satisfactoria**: en el DC queda un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` con origen la IP de la víctima (10.10.10.50), y con esa sesión **enumeré recursos del dominio** (`net view` devolvió `NETLOGON` y `SYSVOL`). Eso ya prueba la reutilización de credenciales válidas, **T1078** (*Valid Accounts*). Cosa distinta es el **acceso efectivo a un recurso administrativo**: al intentar leer `\\DC-NEXORA\C$`, el acceso depende de privilegios y, como `rrhh.ana` es una cuenta de dominio **sin derechos de administrador**, se **deniega**. Dicho de otro modo, autenticarse no equivale a tener acceso privilegiado; la técnica **T1021.002** (*SMB/Windows Admin Shares*) queda aquí a nivel de **sesión SMB autenticada y enumeración**, no de acceso efectivo al administrativo.
 
-> **Sobre la detección en Wazuh.** En este laboratorio verifiqué el 4624 **directamente en el registro de Seguridad del DC** (Visor de eventos / `Get-WinEvent`), no como alerta en el panel. La **regla 100203** es la correlación que elevaría ese inicio de sesión a una alerta de nivel 12 **en Wazuh siempre que DC-NEXORA tenga desplegado el agente reenviando su canal *Security***. En mi montaje el agente de Wazuh está en la víctima, no en el DC, así que 100203 queda como **regla definida y validada contra el propio evento del DC**, no como alerta observada en Wazuh.
+> **Sobre la detección en Wazuh.** Desplegué el agente de Wazuh **también en DC-NEXORA**, de modo que el controlador de dominio reenvía su canal *Security* al SIEM. Así, el 4624 de `rrhh.ana` no se queda solo en el registro local del DC: queda **centralizado y es visible en el propio SIEM** (vista *Discover* de Wazuh), como muestro más abajo. La **regla 100203** queda definida para elevar esa correlación a una alerta de nivel 12 con nombre propio; en este trabajo dejo documentado el evento ya recibido y consultable en Wazuh.
 
 Al lanzar el script, el `net use` contra el DC se completa correctamente y enumera sus recursos (`NETLOGON`, `SYSVOL`) usando las credenciales robadas:
 
@@ -323,6 +323,10 @@ Al lanzar el script, el `net use` contra el DC se completa correctamente y enume
 En la salida del script se ve además el intento contra `C$`, que queda **denegado** (lo esperable: la cuenta no es administradora). En el **DC-NEXORA**, esa autenticación queda registrada como un evento **4624 de tipo 3** a nombre de `rrhh.ana` (dominio NEXORA.LAB), con **dirección de red de origen 10.10.10.50** (la víctima) y autenticación Kerberos. Es la huella que confirma que las credenciales robadas sirven para **autenticarse** contra el dominio:
 
 ![Evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50 en el DC](images/03-dc-evento-4624.png)
+
+Con el agente de Wazuh ya desplegado en el DC, ese mismo 4624 llega **centralizado al SIEM**. La siguiente captura es el evento visto en la vista *Discover* de Wazuh (índice `wazuh-alerts-4.x`), con `targetUserName: rrhh.ana`, `logonType: 3` e `ipAddress: 10.10.10.50`. Es la diferencia entre comprobar el evento en la máquina y tenerlo recogido y consultable en el SIEM central:
+
+![Evento 4624 de rrhh.ana (tipo 3, origen 10.10.10.50) centralizado en el SIEM de Wazuh](images/03-wazuh-4624-rrhh.png)
 
 ### 3.7 Síntesis: de la evidencia a la conclusión
 
@@ -342,7 +346,7 @@ Un análisis honesto separa lo demostrado de lo que son hipótesis:
 
 - **Confirmado por evidencias:** el robo de credenciales (GoPhish), el reconocimiento en la víctima (Sysmon/Wazuh), la **exfiltración del CSV** (recibido y almacenado por el C2, confirmado en claro con Wireshark) y la **autenticación de red contra el DC** con las credenciales robadas (evento 4624 + enumeración con `net view`).
 - **Lo que NO se demostró (y no debe afirmarse):** el acceso al recurso administrativo `C$` se intentó pero quedó **denegado** (la cuenta no es administradora), así que **no hubo acceso privilegiado efectivo**; tampoco se observó **persistencia** (no apareció una tarea programada maliciosa) ni se determinó el alcance real de los datos más allá del CSV de prueba.
-- **Alcance de la detección en el DC:** el agente de Wazuh está desplegado en la **víctima**, no en DC-NEXORA. Por eso el 4624 lo verifiqué en el **registro de Seguridad del propio DC** y la regla **100203** queda definida y validada contra ese evento, **no observada como alerta en el panel**; para verla en Wazuh habría que instalar el agente en el DC reenviando su canal *Security*.
+- **Detección en el DC:** desplegué el agente de Wazuh en DC-NEXORA, así que el 4624 de `rrhh.ana` no solo queda en el registro local del DC, sino **centralizado y consultable en el SIEM** (apartado 3.6). La regla **100203** queda definida para convertir ese evento en una alerta con nombre propio; su disparo automático depende de afinar el *decoder* de `windows_eventchannel` en el gestor, un ajuste fino que dejo como mejora —el evento que alimentaría la alerta ya está, demostrado, dentro de Wazuh.
 - **Registros que faltarían en un caso real:** una captura de tráfico de mayor duración para estudiar el comportamiento del C2 a lo largo del tiempo (la exfiltración puntual sí quedó capturada byte a byte con Wireshark, apartado 3.4) y la telemetría del propio DC en el SIEM.
 - **Investigación adicional recomendada:** revisar otras cuentas con inicio de sesión en los equipos afectados (eventos 4624 en todo el dominio), buscar reutilización de la credencial en otros servicios y analizar en *sandbox* cualquier binario o adjunto sospechoso.
 
@@ -532,6 +536,13 @@ sudo bash ./wazuh-install.sh -a -i -o
 
 ```powershell
 msiexec /i wazuh-agent-4.9.2-1.msi WAZUH_MANAGER=10.10.10.20 WAZUH_AGENT_NAME=PC-RRHH-01
+Start-Service WazuhSvc
+```
+
+**Agente de Wazuh (controlador de dominio DC-NEXORA).** El agente de Windows ya recoge el canal *Security* (eventos 4624/4634) por defecto, así que basta instalarlo apuntando al gestor para que los inicios de sesión del dominio lleguen al SIEM:
+
+```powershell
+msiexec /i wazuh-agent-4.9.2-1.msi WAZUH_MANAGER=10.10.10.20 WAZUH_AGENT_NAME=DC-NEXORA
 Start-Service WazuhSvc
 ```
 
@@ -1687,14 +1698,15 @@ Se editan en `/var/ossec/etc/rules/local_rules.xml` del gestor. Combinadas con l
   </rule>
 
   <!-- 100203: movimiento lateral - credenciales robadas usadas contra el DC -->
-  <!-- Requiere que DC-NEXORA tenga agente Wazuh enviando el canal Security -->
+  <!-- Requiere que DC-NEXORA tenga agente Wazuh enviando su canal Security.  -->
+  <!-- Se encadena por decoder (windows_eventchannel), no por if_group, que es -->
+  <!-- lo que casa con los eventos del canal Security de Windows en Wazuh 4.x. -->
   <rule id="100203" level="12">
-    <if_group>windows_security</if_group>
+    <decoded_as>windows_eventchannel</decoded_as>
     <field name="win.system.eventID">^4624$</field>
     <field name="win.eventdata.logonType">^3$</field>
     <field name="win.eventdata.targetUserName">rrhh.ana</field>
-    <field name="win.eventdata.ipAddress">10.10.10.50</field>
-    <description>NEXORA: Movimiento lateral - login de rrhh.ana desde la victima hacia el DC</description>
+    <description>NEXORA: Movimiento lateral - login de rrhh.ana (tipo 3, por red) hacia el DC</description>
     <mitre><id>T1078</id><id>T1021.002</id></mitre>
   </rule>
 
