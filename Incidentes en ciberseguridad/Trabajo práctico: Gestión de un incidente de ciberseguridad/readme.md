@@ -93,7 +93,7 @@ Guía breve para todo el personal. Objetivo: reducir el riesgo de incidentes com
 
 ### 4. Datos de clientes (RGPD)
 - Trata los datos personales solo en los sistemas autorizados; **no los copies** a equipos o nubes personales.
-- Si sospechas que ha habido un acceso o fuga de datos, **avisa de inmediato**: en una brecha, el tiempo cuenta (plazo legal de 72 h).
+- Si sospechas que ha habido un acceso o fuga de datos, **avisa de inmediato**: cuando la brecha obliga a notificar (porque supone un riesgo para los derechos y libertades de las personas), la organización dispone de un plazo máximo de **72 h** para comunicarlo a la autoridad, así que cada minuto cuenta.
 
 ### 5. Si crees que has caído en un ataque
 1. **No lo ocultes.** Avisa cuanto antes a IT/RRHH
@@ -306,19 +306,21 @@ El resultado fueron **20 alertas de reconocimiento** (regla 100200) y **3 alerta
 
 ![Detalle forense de un evento de reconocimiento en Wazuh](images/03-wazuh-evento-forense.png)
 
+Un matiz importante para no sobreinterpretar las reglas: la **100201** detecta el **uso** de `Invoke-WebRequest`/`Invoke-RestMethod`, es decir, es un **indicador de actividad** (PowerShell haciendo peticiones de red), no una prueba por sí sola de que se exfiltraran datos. Esa prueba la aporta el apartado 3.4, donde el C2 **recibe y almacena** el fichero y Wireshark confirma el CSV viajando en claro. Las reglas señalan *dónde mirar*; la exfiltración se demuestra con la evidencia del dato recibido.
+
 ### 3.6 Movimiento lateral con credenciales robadas
 
 El phishing no roba credenciales por capricho: el objetivo es **reutilizarlas para avanzar por el dominio**. Para demostrarlo, con el script `movimiento-lateral.ps1` reutilizo las credenciales de dominio de la cuenta comprometida `rrhh.ana` desde PC-RRHH-01 para **autenticarme contra el controlador de dominio DC-NEXORA** mediante `net use` sobre su recurso administrativo. No hace falta malware: basta una credencial válida y herramientas nativas de Windows.
 
-Ese acceso deja huella en el DC como un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` y con origen la IP de la víctima (10.10.10.50). La **regla 100203** de Wazuh lo detecta y lo eleva a alerta de nivel 12, cerrando el escenario del enunciado (el atacante salta de la víctima al dominio). En términos de MITRE ATT&CK corresponde a **T1078** (*Valid Accounts*) y **T1021.002** (*SMB/Windows Admin Shares*).
+Conviene separar dos cosas que no son lo mismo. Lo que esto demuestra es una **autenticación de red satisfactoria**: en el DC queda un **inicio de sesión 4624 de tipo 3** (sesión por red) a nombre de `rrhh.ana` con origen la IP de la víctima (10.10.10.50), y con esa sesión **enumeré recursos del dominio** (`net view` devolvió `NETLOGON` y `SYSVOL`). Eso ya prueba la reutilización de credenciales válidas, **T1078** (*Valid Accounts*). Cosa distinta es el **acceso efectivo a un recurso administrativo**: al intentar leer `\\DC-NEXORA\C$`, el acceso depende de privilegios y, como `rrhh.ana` es una cuenta de dominio **sin derechos de administrador**, se **deniega**. Dicho de otro modo, autenticarse no equivale a tener acceso privilegiado; la técnica **T1021.002** (*SMB/Windows Admin Shares*) queda aquí a nivel de **sesión SMB autenticada y enumeración**, no de acceso efectivo al administrativo.
 
-> Para que la alerta aparezca en Wazuh, DC-NEXORA debe tener instalado el agente enviando su canal *Security*. Si no lo tiene, el inicio de sesión 4624 se comprueba igualmente en el **Visor de eventos** del propio DC.
+> **Sobre la detección en Wazuh.** En este laboratorio verifiqué el 4624 **directamente en el registro de Seguridad del DC** (Visor de eventos / `Get-WinEvent`), no como alerta en el panel. La **regla 100203** es la correlación que elevaría ese inicio de sesión a una alerta de nivel 12 **en Wazuh siempre que DC-NEXORA tenga desplegado el agente reenviando su canal *Security***. En mi montaje el agente de Wazuh está en la víctima, no en el DC, así que 100203 queda como **regla definida y validada contra el propio evento del DC**, no como alerta observada en Wazuh.
 
 Al lanzar el script, el `net use` contra el DC se completa correctamente y enumera sus recursos (`NETLOGON`, `SYSVOL`) usando las credenciales robadas:
 
 ![Ejecución de movimiento-lateral.ps1 desde la víctima contra DC-NEXORA](images/03-movimiento-lateral.png)
 
-En el **DC-NEXORA**, ese acceso queda registrado como un evento **4624 de tipo 3** a nombre de `rrhh.ana` (dominio NEXORA.LAB), con **dirección de red de origen 10.10.10.50** (la víctima) y autenticación Kerberos. Es la huella que confirma el salto al dominio:
+En la salida del script se ve además el intento contra `C$`, que queda **denegado** (lo esperable: la cuenta no es administradora). En el **DC-NEXORA**, esa autenticación queda registrada como un evento **4624 de tipo 3** a nombre de `rrhh.ana` (dominio NEXORA.LAB), con **dirección de red de origen 10.10.10.50** (la víctima) y autenticación Kerberos. Es la huella que confirma que las credenciales robadas sirven para **autenticarse** contra el dominio:
 
 ![Evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50 en el DC](images/03-dc-evento-4624.png)
 
@@ -331,16 +333,17 @@ Para cerrar la investigación resumo cómo cada evidencia recogida sostiene una 
 | Correo en MailHog + embudo de GoPhish | La víctima abrió el correo y envió sus credenciales | Phishing con robo de credenciales confirmado (T1566.002 / T1056.003) |
 | Sysmon + reglas Wazuh 100200/100201 | Comandos de reconocimiento y PowerShell desde la víctima | Actividad de post-explotación en PC-RRHH-01 (T1033 / T1087 / T1059.001) |
 | Log del C2 + carpeta `recibidos/` (148 bytes) + captura de Wireshark | El C2 recibió y almacenó el CSV de clientes; el POST viaja en claro (Content-Length 148) | Exfiltración de datos demostrada (T1071 / T1041) |
-| Evento 4624 (tipo 3) en el DC | Inicio de sesión de `rrhh.ana` desde 10.10.10.50 | Movimiento lateral al dominio con credenciales válidas (T1078 / T1021.002) |
+| Evento 4624 (tipo 3) en el DC + enumeración con `net view` | Autenticación de red satisfactoria de `rrhh.ana` desde 10.10.10.50 y enumeración de recursos del dominio; el acceso al administrativo `C$` se **deniega** (cuenta no privilegiada) | Reutilización de credenciales válidas confirmada (T1078); sesión SMB autenticada y enumeración (T1021.002), **sin** acceso privilegiado efectivo |
 | SHA-256 + cadena de custodia sellada | Huella de cada evidencia, con libro protegido | Integridad verificable frente a una referencia fiable |
 
 ### 3.8 Limitaciones de la investigación
 
 Un análisis honesto separa lo demostrado de lo que son hipótesis:
 
-- **Confirmado por evidencias:** el robo de credenciales (GoPhish), el reconocimiento en la víctima (Sysmon/Wazuh), la **exfiltración del CSV** (recibido y almacenado por el C2) y el **movimiento lateral** al DC (evento 4624).
-- **Hipótesis no confirmadas:** no se ha determinado el alcance real de los datos consultados más allá del CSV de prueba, ni se ha observado **persistencia** efectiva (no apareció una tarea programada maliciosa en este escenario).
-- **Registros que faltarían en un caso real:** los logs del propio controlador de dominio si no tuviera agente de Wazuh, y una captura de tráfico de mayor duración para estudiar el comportamiento del C2 a lo largo del tiempo (la exfiltración puntual sí quedó capturada byte a byte con Wireshark, apartado 3.4).
+- **Confirmado por evidencias:** el robo de credenciales (GoPhish), el reconocimiento en la víctima (Sysmon/Wazuh), la **exfiltración del CSV** (recibido y almacenado por el C2, confirmado en claro con Wireshark) y la **autenticación de red contra el DC** con las credenciales robadas (evento 4624 + enumeración con `net view`).
+- **Lo que NO se demostró (y no debe afirmarse):** el acceso al recurso administrativo `C$` se intentó pero quedó **denegado** (la cuenta no es administradora), así que **no hubo acceso privilegiado efectivo**; tampoco se observó **persistencia** (no apareció una tarea programada maliciosa) ni se determinó el alcance real de los datos más allá del CSV de prueba.
+- **Alcance de la detección en el DC:** el agente de Wazuh está desplegado en la **víctima**, no en DC-NEXORA. Por eso el 4624 lo verifiqué en el **registro de Seguridad del propio DC** y la regla **100203** queda definida y validada contra ese evento, **no observada como alerta en el panel**; para verla en Wazuh habría que instalar el agente en el DC reenviando su canal *Security*.
+- **Registros que faltarían en un caso real:** una captura de tráfico de mayor duración para estudiar el comportamiento del C2 a lo largo del tiempo (la exfiltración puntual sí quedó capturada byte a byte con Wireshark, apartado 3.4) y la telemetría del propio DC en el SIEM.
 - **Investigación adicional recomendada:** revisar otras cuentas con inicio de sesión en los equipos afectados (eventos 4624 en todo el dominio), buscar reutilización de la credencial en otros servicios y analizar en *sandbox* cualquier binario o adjunto sospechoso.
 
 ---
@@ -828,16 +831,24 @@ net use "\\$DC\IPC$" /user:$Usuario $Password
 Write-Host "`n[*] Enumerando recursos compartidos del DC:" -ForegroundColor Yellow
 net view "\\$DC"
 
-# 3) Intento de acceso al recurso administrativo C$ (dependera de permisos).
-Write-Host "`n[*] Intentando listar \\$DC\C$ :" -ForegroundColor Yellow
-cmd /c "dir \\$DC\C$" 2>$null
+# 3) Intento de acceso al recurso ADMINISTRATIVO C$ y comprobacion EXPLICITA del
+#    resultado. Autenticarse (paso 1) NO implica acceso privilegiado: con una
+#    cuenta de dominio sin derechos de administrador, esto debe denegarse.
+Write-Host "`n[*] Intentando acceder al recurso administrativo \\$DC\C$ :" -ForegroundColor Yellow
+cmd /c "dir \\$DC\C$" > $null 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "    [!] ACCESO CONCEDIDO a C$ (la cuenta tiene privilegios administrativos)" -ForegroundColor Red
+} else {
+    Write-Host "    [i] ACCESO DENEGADO a C$ (esperado: rrhh.ana no es administrador)." -ForegroundColor DarkGray
+    Write-Host "        La autenticacion de red es valida, pero no concede acceso al administrativo." -ForegroundColor DarkGray
+}
 
 # 4) Limpieza de la conexion.
 net use "\\$DC\IPC$" /delete 2>$null
 
 Write-Host "`n[+] Hecho." -ForegroundColor Green
-Write-Host "    En el DC: evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50." -ForegroundColor Green
-Write-Host "    En Wazuh: alerta 100203 (movimiento lateral)." -ForegroundColor Green
+Write-Host "    En el DC (registro de Seguridad): evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50." -ForegroundColor Green
+Write-Host "    Regla Wazuh 100203: saltaria como alerta SOLO si el DC reenvia su canal Security al SIEM." -ForegroundColor Green
 ```
 
 ### `c2-server.py`
@@ -1248,9 +1259,10 @@ def main():
         ruta = pedir_ruta()
         abs_ruta = os.path.abspath(ruta)
         actual = sha256_fichero(ruta)
-        # Busca por ruta absoluta; si no, por nombre como respaldo
-        entrada = next((e for e in reg if e["ruta"] == abs_ruta), None) \
-            or next((e for e in reg if e["fichero"] == os.path.basename(ruta)), None)
+        # Busca SOLO por ruta absoluta. No se usa el nombre como respaldo: dos
+        # evidencias con el mismo nombre en carpetas distintas no deben confundirse,
+        # y un respaldo por nombre podria seleccionar la entrada equivocada.
+        entrada = next((e for e in reg if e["ruta"] == abs_ruta), None)
         if not entrada:
             print(f"[!] {abs_ruta} no esta en el libro de custodia.")
             return
