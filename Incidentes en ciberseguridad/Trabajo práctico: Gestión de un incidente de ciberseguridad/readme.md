@@ -231,10 +231,10 @@ La víctima introdujo sus credenciales, que quedaron capturadas en claro. GoPhis
 
 ```
 username: rrhh.ana@nexora.lab
-password: verano2027
+password: Hola_1234
 ```
 
-> **Nota.** La credencial mostrada es un valor **ficticio de demostración** introducido durante el simulacro; no corresponde a ninguna cuenta real. En términos de MITRE ATT&CK, esta fase combina **T1566.002** (*Spearphishing Link*, phishing con enlace) y **T1056.003** (*Web Portal Capture*, captura de credenciales en un portal web).
+> **Nota.** La credencial mostrada es un valor **ficticio de demostración** introducido durante el simulacro; no corresponde a ninguna cuenta real. Es, además, **la misma credencial (`rrhh.ana` / `Hola_1234`) que se reutiliza en el apartado 3.6** para autenticarse contra el controlador de dominio: así queda cerrada la cadena *robo de credencial → reutilización en el dominio*. En términos de MITRE ATT&CK, esta fase combina **T1566.002** (*Spearphishing Link*, phishing con enlace) y **T1056.003** (*Web Portal Capture*, captura de credenciales en un portal web).
 
 La siguiente captura muestra el embudo completo de la campaña para la víctima Ana Prueba, con el estado final **Submitted Data** y las credenciales capturadas en el detalle del evento:
 
