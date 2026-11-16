@@ -240,6 +240,10 @@ La siguiente captura muestra el embudo completo de la campaña para la víctima 
 
 ![Embudo de GoPhish con la cronología del ataque y las credenciales capturadas](images/03-gophish-embudo-credenciales.png)
 
+Nada más enviar las credenciales, el portal falso **redirige a la víctima a una página de confirmación** —*«Datos verificados correctamente»*— que simula el acceso correcto al Portal del Empleado y anuncia una redirección a la intranet corporativa. Es el toque final de la ingeniería social: la víctima cree que todo ha ido bien y **no sospecha que acaba de entregar su contraseña**, lo que da tiempo al atacante a usarla antes de que nadie dé la alarma.
+
+![Página de confirmación falsa mostrada tras el robo, para no levantar sospechas](images/03-portal-verificado.png)
+
 A nivel de campaña, el panel de GoPhish resume el éxito del simulacro (*Phishing Success Overview* de «Phishing RRHH - Nov2026 v2»): de 2 correos enviados, 2 fueron abiertos, 1 hizo clic y 1 entregó sus datos, con 0 reportados. Es una métrica directamente aprovechable para justificar la formación del apartado 1:
 
 ![Dashboard de GoPhish con las métricas de la campaña](images/03-gophish-dashboard.png)
