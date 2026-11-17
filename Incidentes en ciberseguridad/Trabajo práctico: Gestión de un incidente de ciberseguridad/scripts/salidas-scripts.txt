@@ -1,0 +1,114 @@
+===========================================================================
+ SALIDAS REALES DE LOS SCRIPTS PROPIOS — Incidente Nexora S.L.
+ Autor: L.F. Arrosquipa  |  Laboratorio aislado 10.10.10.0/24
+ Nota: las claves API se han sustituido por <REDACTADO>; se pasan por
+ variables de entorno y NO se suben al repositorio.
+===========================================================================
+
+
+###########################################################################
+# CÁLCULO DE HASHES / IOCs  (generar-iocs.py)
+###########################################################################
+
+$ python3 generar-iocs.py ~/gophish/
+
+[+] 306 evidencias procesadas.
+[+] Generados: iocs.csv  e  iocs.md
+
+# --- Extracto representativo (lista completa en iocs.csv / iocs.md) ---
+gophish             SHA256=d931718f3b1f0ee178457b668a2565b7c6faf68832437e5690f087cbb47b249b
+config.json         SHA256=c3cdad7b48817696f7cdfb4f95f927e2063d058516c2d2153de30a4c031cfada
+gophish.db          SHA256=1e4042887339f0faaf9fd5b6bfc4883eddbc6dd8668878a4eedb24ce2888e92d
+gophish_admin.crt   SHA256=a8e1e78aec584f7ceb5a64c5bafa21e46189b68b138251c66e9336505ca3b236
+# ... (302 ficheros más de la instalación de GoPhish sellados en iocs.csv/iocs.md)
+
+
+###########################################################################
+# EXFILTRACIÓN DEMOSTRADA: SERVIDOR C2 (c2-server.py) + ANÁLISIS
+###########################################################################
+
+# El servidor C2 no solo registra la petición: RECIBE y GUARDA el fichero,
+# así la exfiltración queda probada por los bytes almacenados en el atacante.
+
+$ python3 c2-server.py 8000          # en el atacante (Kali, 10.10.10.100)
+
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=1 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=2 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=3 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:34] "GET /beacon?id=4 HTTP/1.1" 200 -
+10.10.10.50 - - [16/Nov/2026 17:00:37] "POST /exfil_clientes.csv HTTP/1.1" 200 148
+    [+] 148 bytes guardados en recibidos/20261116_170037_exfil_clientes.csv
+
+# Análisis del log, con validación de destino y recuento de bytes recibidos:
+$ python3 analizar-conexiones.py c2.log --atacante 10.10.10.100
+
+[*] Analizando c2.log
+    IP del atacante / C2: 10.10.10.100
+
+=== Origenes de las conexiones (clientes del C2) ===
+  10.10.10.50      5 peticiones  <-- VICTIMA
+
+=== Beacon / C2 (comunicacion periodica) ===
+  [BEACON] 10.10.10.50 -> GET /beacon?id=1  (HTTP 200)
+  [BEACON] 10.10.10.50 -> GET /beacon?id=2  (HTTP 200)
+  [BEACON] 10.10.10.50 -> GET /beacon?id=3  (HTTP 200)
+  [BEACON] 10.10.10.50 -> GET /beacon?id=4  (HTTP 200)
+  Total beacons: 4  (patron periodico = C2, MITRE T1071)
+
+=== Exfiltracion de datos (POST recibidos) ===
+  [EXFIL] 10.10.10.50 -> POST /exfil_clientes.csv  148 bytes  [RECIBIDO Y ALMACENADO]
+  Total exfiltrado: 148 bytes en 1 POST
+
+[+] Conclusion:
+    CONFIRMADO: el C2 (10.10.10.100) recibio y almaceno 148 bytes exfiltrados desde la victima.
+    Tecnicas: C2 (T1071) y exfiltracion por el canal C2 (T1041).
+
+
+###########################################################################
+# CADENA DE CUSTODIA  (cadena-custodia.py)
+###########################################################################
+
+# Identifica por RUTA ABSOLUTA y SELLA el propio libro (detecta manipulación).
+
+$ python3 cadena-custodia.py add clientes_CONFIDENCIAL.csv --quien "L.F. Arrosquipa" --desc "CSV de clientes (evidencia)"
+$ python3 cadena-custodia.py add c2.log --quien "L.F. Arrosquipa" --desc "Log del servidor C2"
+$ python3 cadena-custodia.py verify clientes_CONFIDENCIAL.csv
+$ python3 cadena-custodia.py sello
+
+[+] Evidencia registrada: clientes_CONFIDENCIAL.csv  (/home/kali/evidencias/clientes_CONFIDENCIAL.csv)
+    SHA-256: 0885eaf506e986518a361fbf0424cc8df62b80aac3bedf0a628c70344aa87cd6
+[+] Evidencia registrada: c2.log  (/home/kali/evidencias/c2.log)
+    SHA-256: d2d1d6dbb0881787ca083498101ac1466cf373d9404a134bd3a45c1d53b4fb8b
+[OK] clientes_CONFIDENCIAL.csv
+    Registrado: 0885eaf506e986518a361fbf0424cc8df62b80aac3bedf0a628c70344aa87cd6
+    Actual:     0885eaf506e986518a361fbf0424cc8df62b80aac3bedf0a628c70344aa87cd6
+    => INTEGRIDAD INTACTA
+[OK] Sello del libro de custodia
+    => LIBRO INTEGRO
+
+
+###########################################################################
+# OSINT DE IOCs  (osint-lookup.py)  —  VirusTotal + AbuseIPDB
+###########################################################################
+
+$ export VT_API_KEY="<REDACTADO>"
+$ export ABUSEIPDB_API_KEY="<REDACTADO>"
+
+# --- Hash SHA-256 capturado por Sysmon (systeminfo.exe) -> VirusTotal ---
+$ python3 osint-lookup.py A220A85750588F5B231FF8CB106BA5409EAABB85E3DD7278A98FCA907E171ED2
+
+[*] IOC: A220A857...E171ED2  ->  tipo detectado: hash
+== VirusTotal ==
+  Detecciones maliciosas: 0/75  (sospechosas: 0)
+  Veredicto: limpio/desconocido
+[+] Consulta OSINT finalizada.
+
+# --- IP pública de ejemplo (valida IP -> AbuseIPDB + VirusTotal) ---
+$ python3 osint-lookup.py 8.8.8.8
+
+[*] IOC: 8.8.8.8  ->  tipo detectado: ip
+== AbuseIPDB ==
+  Puntuacion de abuso: 0%
+  Pais: US  ISP: Google LLC
+  Denuncias totales: 190
+[+] Consulta OSINT finalizada.
