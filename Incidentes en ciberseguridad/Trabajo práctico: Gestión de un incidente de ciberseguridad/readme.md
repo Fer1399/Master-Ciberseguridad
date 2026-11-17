@@ -556,6 +556,8 @@ Start-Service WazuhSvc
 
 Todos los scripts se han escrito a medida para este trabajo. Las **claves API** se pasan por variables de entorno; no figuran en el código ni se suben al repositorio.
 
+> Aquí incluyo los `.ps1` en su versión **directa**, centrada en lo esencial para que se lea con claridad. En la carpeta [`scripts/`](scripts/) están las **versiones más completas y robustas** de cada uno (con comprobaciones adicionales y control de errores), por si se quiere ejecutar o revisar el detalle.
+
 ### `deploy-victima.ps1`
 
 *Prepara la víctima: Sysmon + auditoría + agente Wazuh (recurso compartido con mínimo privilegio).*
