@@ -107,118 +107,22 @@ Dos ajustes del laboratorio que conviene saber al leer las capturas: para que SR
 
 En la tabla se resume la herramienta usada; el comando completo, con la línea de identificación, está junto a cada captura en el Anexo A.
 
-**E-01 · Mínima exposición de servicios · CIS Control 4.8**
-
-- **Sistema · comando:** SRV-UBU · ss -tulpn
-- **Resultado:** 22/tcp (sshd) en 0.0.0.0 y [::] · 80 y 443/tcp (apache2) en todas las interfaces · 53 (systemd-resolved) y 323/udp (chronyd) solo en localhost · 68/udp (DHCP) en 192.168.210.38
-- **Interpretación propia:** SSH escucha en todas las interfaces, así que cualquier equipo de la red plana puede intentar entrar, incluida hoy la wifi del bar. Apache publica la web por 80 y 443 (la de la tienda online). El DNS local y la sincronización horaria solo atienden en localhost, y no hay ninguna base de datos expuesta. El problema no es un servicio de más, sino desde dónde se ve SSH: debe limitarse a la red de administración (IT-BST-01).
-- **Madurez:** L1
-- **Riesgo:** R2 R4 R8
-
-**E-02 · Cortafuegos de host · CIS Ubuntu (ufw)**
-
-- **Sistema · comando:** SRV-UBU · ufw status verbose
-- **Resultado:** Antes: Status: inactive; Después (E-02b, E-02c): activo; SSH solo desde 10.10.10.100; desde Fermentador (10.10.10.30) el 22 falla y el 443 responde
-- **Interpretación propia:** El cortafuegos del servidor estaba desactivado. SRV-UBU acepta conexiones a SSH, 80 y 443 (E-01) desde cualquier equipo de la red, incluida hoy la wifi del bar. Se corrige con la instrucción IT-BST-01 (apartado 4.6).
-- **Madurez:** L0
-- **Riesgo:** R4 R8
-
-**E-03 · Acceso SSH · CIS Ubuntu (SSH)**
-
-- **Sistema · comando:** SRV-UBU · sshd -T
-- **Resultado:** Antes: maxauthtries 6 · permitrootlogin prohibit-password · passwordauthentication yes; Después (E-03b): maxauthtries 4 · permitrootlogin no
-- **Interpretación propia:** Root no puede entrar con contraseña, pero sí con clave. El resto de usuarios entra con contraseña y tiene 6 intentos por conexión. Como SSH escucha en toda la red (E-01), queda expuesto a fuerza bruta. Objetivo: MaxAuthTries 4 y PermitRootLogin no.
-- **Madurez:** L1
-- **Riesgo:** R2 R4
-
-**E-04 · Calidad de contraseñas · CIS Ubuntu (pwquality)**
-
-- **Sistema · comando:** SRV-UBU · pwquality.conf y dpkg
-- **Resultado:** Antes: libpam-pwquality 1.4.5 instalado, sin línea minlen activa; Después (E-04b): minlen = 16
-- **Interpretación propia:** El módulo está instalado pero sin configurar, así que se aplica su mínimo por defecto de 8 caracteres, la mitad de los 16 que fija el enunciado. Es una mejora rápida: solo hay que editar un fichero.
-- **Madurez:** L1
-- **Riesgo:** R2
-
-**E-05 · Gestión de parches · CIS Control 7**
-
-- **Sistema · comando:** SRV-UBU · apt list --upgradable
-- **Resultado:** 121 paquetes pendientes · unattended-upgrades: enabled
-- **Interpretación propia:** Las actualizaciones automáticas están activadas, pero hay 121 paquetes pendientes. O solo instalan los de seguridad (configuración por defecto) o no se están ejecutando, y nadie lo revisa. Confirma el R4: no hay ciclo de parches.
-- **Madurez:** L1
-- **Riesgo:** R4
-
-**E-06 · Cuentas con privilegios · CIS Control 5.4**
-
-- **Sistema · comando:** SRV-UBU · grupo sudo y UID 0
-- **Resultado:** Grupo sudo: ciberseguridad · UID 0: solo root
-- **Interpretación propia:** Hay una sola cuenta con sudo y ninguna cuenta extra con UID 0, lo cual está bien. Pero esa cuenta tiene un nombre genérico: si la usan varias personas, no se sabe quién hizo cada cambio, el mismo problema que el R2.
-- **Madurez:** L2
-- **Riesgo:** R2
-
-**E-07 · Bastionado global · Lynis 3.1.6**
-
-- **Sistema · comando:** SRV-UBU · lynis audit system
-- **Resultado:** Antes: 59 · Después (E-07b): 63
-- **Interpretación propia:** 59 sobre 100 es un servidor sin bastionar: Lynis resume en una cifra lo que muestran E-02 a E-06. Las victorias rápidas (ufw, SSH y contraseñas) lo suben 4 puntos; el informe «después» terminó a las 10:44:50 UTC, con ufw ya activo. Es menos de los 10 puntos que nos habíamos marcado. Lo que más pesa en lo que queda son los 121 paquetes pendientes (E-05) y el resto del bastionado CIS, que van en la medida M04 (60 días).
-- **Madurez:** L1 → L2
-- **Riesgo:** Todos
-
-**E-08 · Perfiles del cortafuegos · CIS Windows (Firewall)**
-
-- **Sistema · comando:** SRV-WIN · Get-NetFirewallProfile
-- **Resultado:** Domain: True · Allow; Private: True · NotConfigured; Public: True · NotConfigured
-- **Interpretación propia:** Los tres perfiles están activos, pero el de dominio, que es el que usa un controlador de dominio en la red de la empresa, deja entrar todo por defecto. En la práctica el cortafuegos está encendido pero no filtra nada: desde el TPV o la wifi del bar se llega a cualquier servicio de SRV-WIN. Private y Public sí bloquean por defecto, pero aquí no se usan.
-- **Madurez:** L1
-- **Riesgo:** R2 R8
-
-**E-09 · Contraseñas y bloqueo · CIS Windows (Account Policies)**
-
-- **Sistema · comando:** SRV-WIN · net accounts
-- **Resultado:** Antes: longitud mínima 7 · vigencia 42 días · historial 24 · bloqueo 6 intentos, 25 min; Tras la línea base: bloqueo 3 intentos, 15 min (E-09b-1); Después (E-09b): bloqueo 6 intentos, 25 min · longitud mínima 7
-- **Interpretación propia:** En la primera medición el bloqueo ya tenía los valores del enunciado. Al aplicar la línea base de OSConfig, esta impuso los suyos (3 intentos y 15 minutos), y volvimos a fijar los del enunciado. Lo que no cambia es la longitud mínima: en un controlador de dominio la marca la directiva del dominio y OSConfig no la toca. Siete caracteres es la mitad de lo recomendado; se corrige con la medida M03.
-- **Madurez:** L2
-- **Riesgo:** R2
-
-**E-10 · Cuentas de administración · CIS Control 5**
-
-- **Sistema · comando:** SRV-WIN · Get-LocalUser y Get-ADGroupMember
-- **Resultado:** Cuentas activas: Administrador, ciso, auditor-g2 · Invitado y krbtgt desactivadas; Administradores: Admins. del dominio, Administradores de empresas, Administrador · Admins. del dominio: solo Administrador
-- **Interpretación propia:** La única persona con privilegios de administración es la cuenta integrada «Administrador», y es con la que se trabaja a diario (whoami en todas las capturas). No hay cuentas nominales de administración: si la comparten varias personas, no se sabe quién hizo cada cambio y, si alguien roba esa contraseña, controla todo el dominio. Es exactamente el R2.
-- **Madurez:** L1
-- **Riesgo:** R2
-
-**E-11 · Auditoría de inicios de sesión · CIS Control 8**
-
-- **Sistema · comando:** SRV-WIN · auditpol (inicio de sesión)
-- **Resultado:** Inicio de sesión: aciertos y errores
-- **Interpretación propia:** Los inicios de sesión, buenos y fallidos, quedan registrados, que es lo que pide la línea base. Lo que falta es que alguien lo revise: los eventos se quedan en el visor del propio servidor y nadie recibe un aviso si alguien prueba contraseñas desde el bar (M09).
-- **Madurez:** L2
-- **Riesgo:** R2 R8
-
-**E-12 · Configuración de SMB · línea base Microsoft**
-
-- **Sistema · comando:** SRV-WIN · Get-SmbServerConfiguration
-- **Resultado:** EnableSMB1Protocol: False · RequireSecuritySignature: True · EncryptData: False
-- **Interpretación propia:** Está bien configurado: SMBv1, la vía clásica de propagación de ransomware, está desactivado y la firma es obligatoria, así que no se puede manipular el tráfico de ficheros. El cifrado no se exige, por lo que el contenido viaja en claro por la red plana; con la segmentación (M02) deja de ser un problema.
-- **Madurez:** L3
-- **Riesgo:** R1
-
-**E-13 · Permisos de datos sensibles · CIS Control 3.3**
-
-- **Sistema · comando:** SRV-WIN · Get-SmbShareAccess y Get-Acl
-- **Resultado:** Recurso compartido: Todos · Allow · Full; NTFS: Todos · FullControl (además de Administradores, SYSTEM y Usuarios)
-- **Interpretación propia:** Carpeta creada en el laboratorio para reproducir el escenario del R5 de la diapositiva 18. Tanto el recurso compartido como los permisos NTFS dan control total a «Todos»: cualquier usuario del dominio puede leer, copiar, cambiar o borrar las recetas, que son el principal secreto de la cervecera.
-- **Madurez:** L0
-- **Riesgo:** R5
-
-**E-14**
-
-- **Control y referencia:** Línea base de seguridad · OSConfig (Windows Server 2025, controlador de dominio)
-- **Sistema · comando:** SRV-WIN · Get-OSConfigDesiredConfiguration
-- **Resultado:** Antes: 347 reglas · 31 % de cumplimiento; Después (E-14b): 347 reglas · 100 %
-- **Interpretación propia:** Antes de aplicarla, el servidor solo cumplía una de cada tres reglas de la línea base de Microsoft para controladores de dominio. Al aplicarla se procesaron 345 ajustes y el cumplimiento llegó al 100 %. Excepción documentada: no se reinició, porque la línea base activa la seguridad basada en virtualización y VirtualBox no arranca con ella; los ajustes quedan escritos, pero los que dependen del reinicio no se han podido probar en el laboratorio.
-- **Madurez:** L1
-- **Riesgo:** Todos
+| Ev. · Control y referencia | Resultado | Interpretación propia | Madurez · Riesgo |
+|---|---|---|---|
+| **E-01**<br>Mínima exposición de servicios · CIS Control 4.8 | *SRV-UBU · ss -tulpn*<br>22/tcp (sshd) en 0.0.0.0 y [::] · 80 y 443/tcp (apache2) en todas las interfaces · 53 (systemd-resolved) y 323/udp (chronyd) solo en localhost · 68/udp (DHCP) en 192.168.210.38 | SSH escucha en todas las interfaces, así que cualquier equipo de la red plana puede intentar entrar, incluida hoy la wifi del bar. Apache publica la web por 80 y 443 (la de la tienda online). El DNS local y la sincronización horaria solo atienden en localhost, y no hay ninguna base de datos expuesta. El problema no es un servicio de más, sino desde dónde se ve SSH: debe limitarse a la red de administración (IT-BST-01). | **Madurez:** L1<br>**Riesgo:** R2 R4 R8 |
+| **E-02**<br>Cortafuegos de host · CIS Ubuntu (ufw) | *SRV-UBU · ufw status verbose*<br>Antes: Status: inactive<br>Después (E-02b, E-02c): activo; SSH solo desde 10.10.10.100; desde Fermentador (10.10.10.30) el 22 falla y el 443 responde | El cortafuegos del servidor estaba desactivado. SRV-UBU acepta conexiones a SSH, 80 y 443 (E-01) desde cualquier equipo de la red, incluida hoy la wifi del bar. Se corrige con la instrucción IT-BST-01 (apartado 4.6). | **Madurez:** L0<br>**Riesgo:** R4 R8 |
+| **E-03**<br>Acceso SSH · CIS Ubuntu (SSH) | *SRV-UBU · sshd -T*<br>Antes: maxauthtries 6 · permitrootlogin prohibit-password · passwordauthentication yes<br>Después (E-03b): maxauthtries 4 · permitrootlogin no | Root no puede entrar con contraseña, pero sí con clave. El resto de usuarios entra con contraseña y tiene 6 intentos por conexión. Como SSH escucha en toda la red (E-01), queda expuesto a fuerza bruta. Objetivo: MaxAuthTries 4 y PermitRootLogin no. | **Madurez:** L1<br>**Riesgo:** R2 R4 |
+| **E-04**<br>Calidad de contraseñas · CIS Ubuntu (pwquality) | *SRV-UBU · pwquality.conf y dpkg*<br>Antes: libpam-pwquality 1.4.5 instalado, sin línea minlen activa<br>Después (E-04b): minlen = 16 | El módulo está instalado pero sin configurar, así que se aplica su mínimo por defecto de 8 caracteres, la mitad de los 16 que fija el enunciado. Es una mejora rápida: solo hay que editar un fichero. | **Madurez:** L1<br>**Riesgo:** R2 |
+| **E-05**<br>Gestión de parches · CIS Control 7 | *SRV-UBU · apt list --upgradable*<br>121 paquetes pendientes · unattended-upgrades: enabled | Las actualizaciones automáticas están activadas, pero hay 121 paquetes pendientes. O solo instalan los de seguridad (configuración por defecto) o no se están ejecutando, y nadie lo revisa. Confirma el R4: no hay ciclo de parches. | **Madurez:** L1<br>**Riesgo:** R4 |
+| **E-06**<br>Cuentas con privilegios · CIS Control 5.4 | *SRV-UBU · grupo sudo y UID 0*<br>Grupo sudo: ciberseguridad · UID 0: solo root | Hay una sola cuenta con sudo y ninguna cuenta extra con UID 0, lo cual está bien. Pero esa cuenta tiene un nombre genérico: si la usan varias personas, no se sabe quién hizo cada cambio, el mismo problema que el R2. | **Madurez:** L2<br>**Riesgo:** R2 |
+| **E-07**<br>Bastionado global · Lynis 3.1.6 | *SRV-UBU · lynis audit system*<br>Antes: 59 · Después (E-07b): 63 | 59 sobre 100 es un servidor sin bastionar: Lynis resume en una cifra lo que muestran E-02 a E-06. Las victorias rápidas (ufw, SSH y contraseñas) lo suben 4 puntos; el informe «después» terminó a las 10:44:50 UTC, con ufw ya activo. Es menos de los 10 puntos que nos habíamos marcado. Lo que más pesa en lo que queda son los 121 paquetes pendientes (E-05) y el resto del bastionado CIS, que van en la medida M04 (60 días). | **Madurez:** L1 → L2<br>**Riesgo:** Todos |
+| **E-08**<br>Perfiles del cortafuegos · CIS Windows (Firewall) | *SRV-WIN · Get-NetFirewallProfile*<br>Domain: True · Allow<br>Private: True · NotConfigured<br>Public: True · NotConfigured | Los tres perfiles están activos, pero el de dominio, que es el que usa un controlador de dominio en la red de la empresa, deja entrar todo por defecto. En la práctica el cortafuegos está encendido pero no filtra nada: desde el TPV o la wifi del bar se llega a cualquier servicio de SRV-WIN. Private y Public sí bloquean por defecto, pero aquí no se usan. | **Madurez:** L1<br>**Riesgo:** R2 R8 |
+| **E-09**<br>Contraseñas y bloqueo · CIS Windows (Account Policies) | *SRV-WIN · net accounts*<br>Antes: longitud mínima 7 · vigencia 42 días · historial 24 · bloqueo 6 intentos, 25 min<br>Tras la línea base: bloqueo 3 intentos, 15 min (E-09b-1)<br>Después (E-09b): bloqueo 6 intentos, 25 min · longitud mínima 7 | En la primera medición el bloqueo ya tenía los valores del enunciado. Al aplicar la línea base de OSConfig, esta impuso los suyos (3 intentos y 15 minutos), y volvimos a fijar los del enunciado. Lo que no cambia es la longitud mínima: en un controlador de dominio la marca la directiva del dominio y OSConfig no la toca. Siete caracteres es la mitad de lo recomendado; se corrige con la medida M03. | **Madurez:** L2<br>**Riesgo:** R2 |
+| **E-10**<br>Cuentas de administración · CIS Control 5 | *SRV-WIN · Get-LocalUser y Get-ADGroupMember*<br>Cuentas activas: Administrador, ciso, auditor-g2 · Invitado y krbtgt desactivadas<br>Administradores: Admins. del dominio, Administradores de empresas, Administrador · Admins. del dominio: solo Administrador | La única persona con privilegios de administración es la cuenta integrada «Administrador», y es con la que se trabaja a diario (whoami en todas las capturas). No hay cuentas nominales de administración: si la comparten varias personas, no se sabe quién hizo cada cambio y, si alguien roba esa contraseña, controla todo el dominio. Es exactamente el R2. | **Madurez:** L1<br>**Riesgo:** R2 |
+| **E-11**<br>Auditoría de inicios de sesión · CIS Control 8 | *SRV-WIN · auditpol (inicio de sesión)*<br>Inicio de sesión: aciertos y errores | Los inicios de sesión, buenos y fallidos, quedan registrados, que es lo que pide la línea base. Lo que falta es que alguien lo revise: los eventos se quedan en el visor del propio servidor y nadie recibe un aviso si alguien prueba contraseñas desde el bar (M09). | **Madurez:** L2<br>**Riesgo:** R2 R8 |
+| **E-12**<br>Configuración de SMB · línea base Microsoft | *SRV-WIN · Get-SmbServerConfiguration*<br>EnableSMB1Protocol: False · RequireSecuritySignature: True · EncryptData: False | Está bien configurado: SMBv1, la vía clásica de propagación de ransomware, está desactivado y la firma es obligatoria, así que no se puede manipular el tráfico de ficheros. El cifrado no se exige, por lo que el contenido viaja en claro por la red plana; con la segmentación (M02) deja de ser un problema. | **Madurez:** L3<br>**Riesgo:** R1 |
+| **E-13**<br>Permisos de datos sensibles · CIS Control 3.3 | *SRV-WIN · Get-SmbShareAccess y Get-Acl*<br>Recurso compartido: Todos · Allow · Full<br>NTFS: Todos · FullControl (además de Administradores, SYSTEM y Usuarios) | Carpeta creada en el laboratorio para reproducir el escenario del R5 de la diapositiva 18. Tanto el recurso compartido como los permisos NTFS dan control total a «Todos»: cualquier usuario del dominio puede leer, copiar, cambiar o borrar las recetas, que son el principal secreto de la cervecera. | **Madurez:** L0<br>**Riesgo:** R5 |
+| **E-14**<br>Línea base de seguridad · OSConfig (Windows Server 2025, controlador de dominio) | *SRV-WIN · Get-OSConfigDesiredConfiguration*<br>Antes: 347 reglas · 31 % de cumplimiento<br>Después (E-14b): 347 reglas · 100 % | Antes de aplicarla, el servidor solo cumplía una de cada tres reglas de la línea base de Microsoft para controladores de dominio. Al aplicarla se procesaron 345 ajustes y el cumplimiento llegó al 100 %. Excepción documentada: no se reinició, porque la línea base activa la seguridad basada en virtualización y VirtualBox no arranca con ella; los ajustes quedan escritos, pero los que dependen del reinicio no se han podido probar en el laboratorio. | **Madurez:** L1<br>**Riesgo:** Todos |
 
 Los ajustes aplicados después (MaxAuthTries 4, minlen 16, ufw, OSConfig y bloqueo de 6 intentos y 25 minutos) y sus comandos están al principio del Anexo A, junto a las capturas «después» (letra b).
 
@@ -239,95 +143,18 @@ Cada medida sale de un riesgo del apartado 1 y, cuando la hay, de una evidencia 
 
 ### 3.1 Catálogo de medidas
 
-**M01**
-
-- **Medida técnica:** Copias 3-2-1: copia diaria a un PC retirado que solo se conecta durante la copia, más una copia inmutable en la nube. Prueba de restauración cada mes.
-- **Riesgo · evidencia:** R1 · E-12
-- **Tipo:** Preventiva y de recuperación
-- **Responsable:** Responsable de informática
-- **Plazo:** 30 d
-- **Coste año 1:** 1.200 €
-
-**M02**
-
-- **Medida técnica:** Segmentar la red en VLAN (servidores, oficina, sensores, TPV del bar, wifi de clientes y gestión) con un cortafuegos entre ellas. La wifi de clientes solo sale a Internet.
-- **Riesgo · evidencia:** R1 R3 R8 · E-01 E-08
-- **Tipo:** Preventiva
-- **Responsable:** Proveedor TIC
-- **Plazo:** 60 d
-- **Coste año 1:** 2.200 €
-
-**M03**
-
-- **Medida técnica:** Cuentas nominales de administración, desactivar el administrador compartido, Windows LAPS, MFA en los accesos de administración y contraseñas de al menos 14 caracteres en la directiva del dominio (el bloqueo de 6 intentos y 25 minutos ya existe).
-- **Riesgo · evidencia:** R2 · E-09 E-10
-- **Tipo:** Preventiva
-- **Responsable:** Responsable de informática
-- **Plazo:** 30 d
-- **Coste año 1:** 400 €
-
-**M04**
-
-- **Medida técnica:** Parcheo mensual y bastionado CIS nivel 1 de SRV-UBU y SRV-WIN (ufw, SSH, contraseñas, OSConfig) y cortafuegos de aplicaciones web (ModSecurity con OWASP CRS) delante de la tienda.
-- **Riesgo · evidencia:** R4 R2 · E-02 a E-07, E-14
-- **Tipo:** Preventiva
-- **Responsable:** Responsable de informática
-- **Plazo:** 30 d · WAF 60 d
-- **Coste año 1:** 0 €
-
-**M05**
-
-- **Medida técnica:** Bar seguro: datáfono certificado con conexión 4G propia y separado del TPV, un usuario por camarero, wifi de clientes aislada, revisión del datáfono al abrir y 30 minutos de formación a los camareros.
-- **Riesgo · evidencia:** R8 · E-01 E-08
-- **Tipo:** Preventiva
-- **Responsable:** Encargado del bar e informática
-- **Plazo:** 30 d · datáfono 60 d
-- **Coste año 1:** 1.100 €
-
-**M06**
-
-- **Medida técnica:** Sensores IoT: cambiar las claves de fábrica, actualizar el firmware y pasarlos a su propia VLAN sin acceso a la red interna.
-- **Riesgo · evidencia:** R3
-- **Tipo:** Preventiva
-- **Responsable:** Responsable de informática
-- **Plazo:** 30 d · VLAN 60 d
-- **Coste año 1:** 0 €
-
-**M07**
-
-- **Medida técnica:** Permisos por rol en la carpeta de recetas: quitar «Todos», crear un grupo solo para producción y auditar quién abre los archivos.
-- **Riesgo · evidencia:** R5 · E-13
-- **Tipo:** Preventiva y detectiva
-- **Responsable:** Informática y maestro cervecero
-- **Plazo:** 30 d
-- **Coste año 1:** 0 €
-
-**M08**
-
-- **Medida técnica:** SAI en el armario de servidores con apagado ordenado de SRV-UBU, SRV-WIN y el NAS.
-- **Riesgo · evidencia:** R6
-- **Tipo:** Minimiza el impacto
-- **Responsable:** Mantenimiento
-- **Plazo:** 90 d
-- **Coste año 1:** 900 €
-
-**M09**
-
-- **Medida técnica:** Registros centralizados y alertas con Wazuh en un segundo PC retirado: inicios de sesión fallidos, cambios en el TPV y accesos a las recetas.
-- **Riesgo · evidencia:** R1 R2 R8 · E-11
-- **Tipo:** Detectiva
-- **Responsable:** Responsable de informática
-- **Plazo:** 90 d
-- **Coste año 1:** 0 €
-
-**M10**
-
-- **Medida técnica:** Protección anti-DDoS contratada con el proveedor de la tienda online.
-- **Riesgo · evidencia:** R7
-- **Tipo:** Transferencia
-- **Responsable:** Gerencia y proveedor
-- **Plazo:** 90 d
-- **Coste año 1:** 600 €
+| ID | Medida técnica | Riesgo · evidencia · Tipo · Responsable · Plazo · Coste año 1 |
+|---|---|---|
+| **M01** | Copias 3-2-1: copia diaria a un PC retirado que solo se conecta durante la copia, más una copia inmutable en la nube. Prueba de restauración cada mes. | **Riesgo · evidencia:** R1 · E-12<br>**Tipo:** Preventiva y de recuperación<br>**Responsable:** Responsable de informática<br>**Plazo:** 30 d<br>**Coste año 1:** 1.200 € |
+| **M02** | Segmentar la red en VLAN (servidores, oficina, sensores, TPV del bar, wifi de clientes y gestión) con un cortafuegos entre ellas. La wifi de clientes solo sale a Internet. | **Riesgo · evidencia:** R1 R3 R8 · E-01 E-08<br>**Tipo:** Preventiva<br>**Responsable:** Proveedor TIC<br>**Plazo:** 60 d<br>**Coste año 1:** 2.200 € |
+| **M03** | Cuentas nominales de administración, desactivar el administrador compartido, Windows LAPS, MFA en los accesos de administración y contraseñas de al menos 14 caracteres en la directiva del dominio (el bloqueo de 6 intentos y 25 minutos ya existe). | **Riesgo · evidencia:** R2 · E-09 E-10<br>**Tipo:** Preventiva<br>**Responsable:** Responsable de informática<br>**Plazo:** 30 d<br>**Coste año 1:** 400 € |
+| **M04** | Parcheo mensual y bastionado CIS nivel 1 de SRV-UBU y SRV-WIN (ufw, SSH, contraseñas, OSConfig) y cortafuegos de aplicaciones web (ModSecurity con OWASP CRS) delante de la tienda. | **Riesgo · evidencia:** R4 R2 · E-02 a E-07, E-14<br>**Tipo:** Preventiva<br>**Responsable:** Responsable de informática<br>**Plazo:** 30 d · WAF 60 d<br>**Coste año 1:** 0 € |
+| **M05** | Bar seguro: datáfono certificado con conexión 4G propia y separado del TPV, un usuario por camarero, wifi de clientes aislada, revisión del datáfono al abrir y 30 minutos de formación a los camareros. | **Riesgo · evidencia:** R8 · E-01 E-08<br>**Tipo:** Preventiva<br>**Responsable:** Encargado del bar e informática<br>**Plazo:** 30 d · datáfono 60 d<br>**Coste año 1:** 1.100 € |
+| **M06** | Sensores IoT: cambiar las claves de fábrica, actualizar el firmware y pasarlos a su propia VLAN sin acceso a la red interna. | **Riesgo · evidencia:** R3<br>**Tipo:** Preventiva<br>**Responsable:** Responsable de informática<br>**Plazo:** 30 d · VLAN 60 d<br>**Coste año 1:** 0 € |
+| **M07** | Permisos por rol en la carpeta de recetas: quitar «Todos», crear un grupo solo para producción y auditar quién abre los archivos. | **Riesgo · evidencia:** R5 · E-13<br>**Tipo:** Preventiva y detectiva<br>**Responsable:** Informática y maestro cervecero<br>**Plazo:** 30 d<br>**Coste año 1:** 0 € |
+| **M08** | SAI en el armario de servidores con apagado ordenado de SRV-UBU, SRV-WIN y el NAS. | **Riesgo · evidencia:** R6<br>**Tipo:** Minimiza el impacto<br>**Responsable:** Mantenimiento<br>**Plazo:** 90 d<br>**Coste año 1:** 900 € |
+| **M09** | Registros centralizados y alertas con Wazuh en un segundo PC retirado: inicios de sesión fallidos, cambios en el TPV y accesos a las recetas. | **Riesgo · evidencia:** R1 R2 R8 · E-11<br>**Tipo:** Detectiva<br>**Responsable:** Responsable de informática<br>**Plazo:** 90 d<br>**Coste año 1:** 0 € |
+| **M10** | Protección anti-DDoS contratada con el proveedor de la tienda online. | **Riesgo · evidencia:** R7<br>**Tipo:** Transferencia<br>**Responsable:** Gerencia y proveedor<br>**Plazo:** 90 d<br>**Coste año 1:** 600 € |
 
 **Total año 1: 6.400 €** más horas internas. Presupuesto máximo del enunciado: 8.000 €. Margen para imprevistos: 1.600 €. Los costes son estimaciones a partir de precios de mercado y se sustituirán por presupuestos firmes antes de contratar.
 
@@ -399,69 +226,16 @@ El orden no sigue solo la puntuación. M02 tiene 18 puntos pero va en el segundo
 
 Para cada riesgo indicamos qué baja: la probabilidad (que ocurra) o el impacto, que baja cuando baja la degradación del activo.
 
-**R1**
-
-- **Inherente:** 4 × 5 = 20
-- **Medidas:** M01 M02 M04 M09
-- **Qué baja y por qué:** P de 4 a 2: red segmentada, parches y SMBv1 fuera. Degradación de D de 100 % a 10 %: con la copia inmutable probada se pierde como mucho un día, así que I baja de 5 a 3.
-- **Residual:** 6 · Medio
-- **Decisión:** Aceptar y vigilar
-
-**R2**
-
-- **Inherente:** 4 × 5 = 20
-- **Medidas:** M03 M04 M09
-- **Qué baja y por qué:** P de 4 a 1: cuentas nominales, MFA y bloqueo a los 6 intentos. I sigue en 5: quien entre como administrador lo controla todo.
-- **Residual:** 5 · Medio
-- **Decisión:** Aceptar y vigilar
-
-**R3**
-
-- **Inherente:** 3 × 4 = 12
-- **Medidas:** M02 M06
-- **Qué baja y por qué:** P de 3 a 1: claves únicas y firmware al día. I de 4 a 3: aunque tomen un sensor, ya no hay salto a la red interna.
-- **Residual:** 3 · Bajo
-- **Decisión:** Aceptar
-
-**R4**
-
-- **Inherente:** 3 × 5 = 15
-- **Medidas:** M04
-- **Qué baja y por qué:** P de 3 a 2: parches mensuales y WAF. I de 5 a 4: ufw reduce lo que queda expuesto.
-- **Residual:** 8 · Medio
-- **Decisión:** Aceptar y vigilar
-
-**R5**
-
-- **Inherente:** 2 × 5 = 10
-- **Medidas:** M07 M09
-- **Qué baja y por qué:** P de 2 a 1: solo producción accede y queda registrado. I sigue en 5: las recetas valen lo mismo.
-- **Residual:** 5 · Medio
-- **Decisión:** Aceptar
-
-**R6**
-
-- **Inherente:** 2 × 3 = 6
-- **Medidas:** M08
-- **Qué baja y por qué:** I de 3 a 2: el apagado ordenado evita la corrupción de datos.
-- **Residual:** 4 · Bajo
-- **Decisión:** Aceptar
-
-**R7**
-
-- **Inherente:** 2 × 4 = 8
-- **Medidas:** M10
-- **Qué baja y por qué:** I de 4 a 2: el proveedor absorbe el ataque.
-- **Residual:** 4 · Bajo
-- **Decisión:** Transferir
-
-**R8**
-
-- **Inherente:** 4 × 5 = 20
-- **Medidas:** M05 M02 M09
-- **Qué baja y por qué:** P de 4 a 2: wifi aislada, TPV en su VLAN y usuarios individuales. Degradación de C de 100 % a 10 %: con el datáfono separado, el TPV ya no ve datos de tarjeta; I de 5 a 3.
-- **Residual:** 6 · Medio
-- **Decisión:** Aceptar y vigilar
+| Riesgo | Qué baja y por qué | Inherente · Medidas · Residual · Decisión |
+|---|---|---|
+| **R1** | P de 4 a 2: red segmentada, parches y SMBv1 fuera. Degradación de D de 100 % a 10 %: con la copia inmutable probada se pierde como mucho un día, así que I baja de 5 a 3. | **Inherente:** 4 × 5 = 20<br>**Medidas:** M01 M02 M04 M09<br>**Residual:** 6 · Medio<br>**Decisión:** Aceptar y vigilar |
+| **R2** | P de 4 a 1: cuentas nominales, MFA y bloqueo a los 6 intentos. I sigue en 5: quien entre como administrador lo controla todo. | **Inherente:** 4 × 5 = 20<br>**Medidas:** M03 M04 M09<br>**Residual:** 5 · Medio<br>**Decisión:** Aceptar y vigilar |
+| **R3** | P de 3 a 1: claves únicas y firmware al día. I de 4 a 3: aunque tomen un sensor, ya no hay salto a la red interna. | **Inherente:** 3 × 4 = 12<br>**Medidas:** M02 M06<br>**Residual:** 3 · Bajo<br>**Decisión:** Aceptar |
+| **R4** | P de 3 a 2: parches mensuales y WAF. I de 5 a 4: ufw reduce lo que queda expuesto. | **Inherente:** 3 × 5 = 15<br>**Medidas:** M04<br>**Residual:** 8 · Medio<br>**Decisión:** Aceptar y vigilar |
+| **R5** | P de 2 a 1: solo producción accede y queda registrado. I sigue en 5: las recetas valen lo mismo. | **Inherente:** 2 × 5 = 10<br>**Medidas:** M07 M09<br>**Residual:** 5 · Medio<br>**Decisión:** Aceptar |
+| **R6** | I de 3 a 2: el apagado ordenado evita la corrupción de datos. | **Inherente:** 2 × 3 = 6<br>**Medidas:** M08<br>**Residual:** 4 · Bajo<br>**Decisión:** Aceptar |
+| **R7** | I de 4 a 2: el proveedor absorbe el ataque. | **Inherente:** 2 × 4 = 8<br>**Medidas:** M10<br>**Residual:** 4 · Bajo<br>**Decisión:** Transferir |
+| **R8** | P de 4 a 2: wifi aislada, TPV en su VLAN y usuarios individuales. Degradación de C de 100 % a 10 %: con el datáfono separado, el TPV ya no ve datos de tarjeta; I de 5 a 3. | **Inherente:** 4 × 5 = 20<br>**Medidas:** M05 M02 M09<br>**Residual:** 6 · Medio<br>**Decisión:** Aceptar y vigilar |
 
 **Si M02 se retrasa:** el R8 se quedaría en 4 × 3 = 12 (alto) solo con el datáfono separado. En ese caso se acepta de forma temporal, con la firma de la gerencia, hasta que la segmentación esté terminada.
 
@@ -745,41 +519,14 @@ Aplicamos el protocolo a los cuatro avisos de nuestro enunciado. En cada uno dec
 
 Después de las capturas «antes», aplicamos estos ajustes con los valores de nuestro enunciado y repetimos la medición. Las capturas «después» van en el Anexo A con la letra b.
 
-**SRV-UBU · MaxAuthTries y root por SSH**
-
-- **Valor:** 4 · no
-- **Comando para aplicarlo:** printf "MaxAuthTries 4\nPermitRootLogin no\n" | sudo tee /etc/ssh/sshd_config.d/10-bst-g2.conf; sudo sshd -t && sudo systemctl reload ssh
-- **Evidencia:** E-03b
-
-**SRV-UBU · Longitud mínima de contraseña**
-
-- **Valor:** 16
-- **Comando para aplicarlo:** sudo apt install -y libpam-pwquality; sudo sed -i -E 's/^#?\s*minlen\s*=.*/minlen = 16/' /etc/security/pwquality.conf
-- **Evidencia:** E-04b
-
-**SRV-UBU · Cortafuegos ufw**
-
-- **Valor:** Solo red interna
-- **Comando para aplicarlo:** Instrucción IT-BST-01 (apartado 4.6)
-- **Evidencia:** E-02b
-
-**SRV-UBU · Índice Lynis**
-
-- **Valor:** Repetir
-- **Comando para aplicarlo:** sudo lynis audit system
-- **Evidencia:** E-07b
-
-**SRV-WIN · Línea base OSConfig**
-
-- **Valor:** Aplicar
-- **Comando para aplicarlo:** Set-OSConfigDesiredConfiguration -Scenario SecurityBaseline/WindowsServer/2025/DomainController -Default
-- **Evidencia:** E-14b
-
-**SRV-WIN · Bloqueo de cuenta**
-
-- **Valor:** 6 intentos · 25 min
-- **Comando para aplicarlo:** net accounts /lockoutthreshold:6 /lockoutwindow:25 /lockoutduration:25
-- **Evidencia:** E-09b
+| Sistema · Ajuste | Valor · Evidencia |
+|---|---|
+| **SRV-UBU**<br>MaxAuthTries y root por SSH | **Valor:** 4 · no<br>**Evidencia:** E-03b |
+| **SRV-UBU**<br>Longitud mínima de contraseña | **Valor:** 16<br>**Evidencia:** E-04b |
+| **SRV-UBU**<br>Cortafuegos ufw | **Valor:** Solo red interna<br>**Evidencia:** E-02b |
+| **SRV-UBU**<br>Índice Lynis | **Valor:** Repetir<br>**Evidencia:** E-07b |
+| **SRV-WIN**<br>Línea base OSConfig | **Valor:** Aplicar<br>**Evidencia:** E-14b |
+| **SRV-WIN**<br>Bloqueo de cuenta | **Valor:** 6 intentos · 25 min<br>**Evidencia:** E-09b |
 
 > **Ojo con el orden en SRV-WIN**
 >
