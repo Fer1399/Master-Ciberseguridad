@@ -350,7 +350,7 @@ echo "/usr/sbin/ufw --force disable" | sudo at now + 10 minutes
 sudo atq        # debe aparecer una tarea programada
 ```
 
-**Paso 2. Política por defecto:** se bloquea todo lo que entra y se permite lo que sale.
+**Paso 2. Política por defecto:** la primera línea bloquea todo lo que entra; la segunda **permite** lo que sale. Ojo: la segunda es «allow», no «deny». Con «deny» el servidor se queda sin actualizaciones ni DNS (lo vimos en el test del Anexo B).
 
 ```bash
 sudo ufw default deny incoming
@@ -375,13 +375,14 @@ sudo ufw allow 80,443/tcp comment 'Tienda online'
 sudo ufw --force enable
 ```
 
+**Paso 6 (obligatorio). Cancelar la marcha atrás antes de 10 minutos.** Si no se cancela, ufw se desactiva solo y el servidor queda sin cortafuegos. sudo atq muestra el número de la tarea y sudo atrm <número> la borra (por ejemplo, sudo atrm 1). Después, sudo ufw status debe seguir diciendo «active».
+
 #### Verificación
 
-1. sudo ufw status verbose → debe decir «Status: active», «Default: deny (incoming)» y la regla del puerto 22 limitada a 10.10.10.100. **Captura E-02b.**
+1. sudo ufw status verbose → debe decir «Status: active», «Default: deny (incoming), allow (outgoing)» y la regla del puerto 22 limitada a 10.10.10.100. **Captura E-02b.**
 2. Desde el equipo de administración (10.10.10.100): ssh auditor-g2@10.10.10.10 → debe entrar.
 3. Desde un equipo que no administra (Fermentador, W11_IoT, 10.10.10.30), en PowerShell: Test-NetConnection 10.10.10.10 -Port 22 → debe dar False; y Test-NetConnection 10.10.10.10 -Port 443 → True, porque la web sigue abierta. **Captura E-02c.**
-4. Si todo está bien, cancelad la marcha atrás **antes de que pasen los 10 minutos**: sudo atq muestra el número de la tarea (por ejemplo, 1) y sudo atrm 1 la borra. Escribid el número, no «<número>».
-5. Comprobad otra vez sudo ufw status. Si sale «inactive» o atrm responde «Cannot find jobid», la marcha atrás ya se ejecutó: volved a activar con sudo ufw --force enable y repetid la verificación.
+4. Si sudo ufw status dice «inactive» o atrm responde «Cannot find jobid», la marcha atrás ya se ejecutó: volved a activar con sudo ufw --force enable y repetid la verificación.
 
 #### Marcha atrás
 
@@ -707,7 +708,44 @@ hostname; Get-Date; whoami; echo BST-G2-M3RA; (mismo comando que E-14)
 
 ## Anexo B · Test del recién llegado (IT-BST-01)
 
-> **Pendiente.** Una persona de otro equipo ejecutará la instrucción IT-BST-01 (apartado 4.6) en SRV-UBU sin nuestra ayuda. Aquí se anotarán quién la ejecutó, la fecha, el tiempo empleado, si terminó sin ayuda, las dudas que tuvo y qué cambiamos en la instrucción, con su captura (E-B1).
+Una persona de otro equipo ejecutó la instrucción IT-BST-01 en nuestro SRV-UBU solo con el documento. Nosotros observamos y anotamos lo que pasó.
+
+|  |  |
+|---|---|
+| Persona que la ejecutó | Luis Arrosquipa · equipo BST-G4 |
+| Fecha | 23/11/2026 |
+| Tiempo empleado | 10 minutos |
+| ¿Terminó sin ayuda? | No: necesitó ayuda en el paso 2, con la diferencia entre «allow» y «deny» en la política por defecto |
+| Errores observados | 1. En el paso 2 escribió «deny outgoing» en lugar de «allow outgoing» (E-B0): el servidor se quedó sin salida, ni actualizaciones ni DNS.<br>2. No canceló la marcha atrás: a los 10 minutos la tarea de at desactivó ufw y el servidor quedó sin cortafuegos. |
+| Cómo se corrigió | Pusimos la salida en «allow», volvimos a activar ufw y verificamos el resultado (E-B1 y E-B2). |
+| Qué cambiamos en la instrucción | 1. En el paso 2 explicamos qué hace cada línea y avisamos de que la salida debe quedar en «allow».<br>2. En la verificación se comprueba también «allow (outgoing)».<br>3. Cancelar la marcha atrás pasa a ser un paso propio (paso 6), obligatorio y con la comprobación de que ufw sigue activo. |
+
+#### E-B0 · Ejecución de Luis: el paso 2 deja la salida en «deny»
+
+```
+Pasos 2 a 5 de IT-BST-01 y sudo ufw status verbose
+```
+
+*Primera línea: «Default outgoing policy changed to 'deny'».*
+
+![E-B0 · Ejecución de Luis: el paso 2 deja la salida en «deny»](images/E-B0.png)
+
+#### E-B1 · Estado final tras corregir la salida y reactivar ufw
+
+```
+sudo ufw --force enable
+hostname; date; whoami; echo BST-G2-M3RA; sudo ufw status verbose
+```
+
+![E-B1 · Estado final tras corregir la salida y reactivar ufw](images/E-B1.png)
+
+#### E-B2 · Verificación desde Fermentador: el puerto 22 no responde
+
+```
+hostname; Get-Date; whoami; echo BST-G2-M3RA; Test-NetConnection 10.10.10.10 -Port 22
+```
+
+![E-B2 · Verificación desde Fermentador: el puerto 22 no responde](images/E-B2.png)
 
 ## Anexo C · Indicadores, dependencias y fichas completas
 
