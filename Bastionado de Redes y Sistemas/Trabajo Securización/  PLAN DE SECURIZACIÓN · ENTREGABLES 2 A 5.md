@@ -2,7 +2,7 @@
 
 **Bastionado de redes y sistemas (5022) · UD1 · Proyecto final** · Entregables 2 a 5 · Variante: bar de degustación (taproom) en la nave
 
-**Equipo:** BST-G2 (Equipo 2) · **Miembros:** Luis Fernando Arrosquipa Mamani · Marcos Olmo García · **Fecha:** 20/11/2026
+**Equipo:** BST-G2 (Equipo 2) · **Miembros:** Luis Fernando Arrosquipa Mamani · Marcos Olmo García · **Fecha:** 23/11/2026
 
 ## Índice
 
@@ -809,4 +809,4 @@ Hemos usado Claude (Anthropic) como apoyo para redactar y revisar el documento y
 
 **Repositorio Git del equipo:** https://github.com/Fer1399/Master-Ciberseguridad/tree/main/Bastionado%20de%20Redes%20y%20Sistemas/Trabajo%20Securizaci%C3%B3n
 
-**Fecha:** 20/11/2026
+**Fecha:** 23/11/2026
