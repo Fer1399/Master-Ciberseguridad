@@ -7,10 +7,10 @@
 ## Índice
 
 1. [Punto de partida y análisis de riesgos (R8)](#1-punto-de-partida-el-bastión-el-bar-y-el-análisis-de-riesgos)
-2. [Entregable 2 · Evaluación de las medidas actuales](#2-entregable-2--evaluación-de-las-medidas-actuales-ce-b)
-3. [Entregable 3 · Plan de medidas priorizado](#3-entregable-3--plan-de-medidas-priorizado-ce-d-y-e)
-4. [Entregable 4 · Marco de referencia](#4-entregable-4--marco-de-referencia-ce-f)
-5. [Entregable 5 · Protocolo de incidencias](#5-entregable-5--protocolo-de-incidencias-con-matriz-de-escalado-ce-f)
+2. [Entregable 2 · Evaluación de las medidas actuales](#2-entregable-2--evaluación-de-las-medidas-actuales)
+3. [Entregable 3 · Plan de medidas priorizado](#3-entregable-3--plan-de-medidas-priorizado)
+4. [Entregable 4 · Marco de referencia](#4-entregable-4--marco-de-referencia)
+5. [Entregable 5 · Protocolo de incidencias](#5-entregable-5--protocolo-de-incidencias-con-matriz-de-escalado)
 6. Anexos: A · Capturas · B · Test del recién llegado · C · Indicadores y fichas · D · Declaración de autoría
 
 ---
@@ -80,7 +80,7 @@ En la primera parte solo indicamos la madurez. Aquí añadimos qué salvaguardas
 
 Madurez: L0 inexistente · L1 inicial · L2 repetible · L3 definido · L4 gestionado · L5 optimizado.
 
-## 2. Entregable 2 · Evaluación de las medidas actuales (CE b)
+## 2. Entregable 2 · Evaluación de las medidas actuales
 
 Aquí solo describimos cómo están hoy los servidores. Las mejoras van en el entregable 3. Evaluamos los dos servidores del laboratorio con siete controles en cada uno: SRV-UBU (Ubuntu Server 26, nombre de equipo fernandosrvubu) y SRV-WIN (Windows Server 2025, nombre de equipo SRV-DC01). SRV-WIN es además el controlador de dominio de Active Directory, lo que sube el valor de todo lo que le afecte.
 
@@ -137,7 +137,7 @@ Los ajustes aplicados después (MaxAuthTries 4, minlen 16, ufw, OSConfig y bloqu
 | Responder (RS) | L1 | No hay protocolo escrito. En el bar nadie sabría a quién llamar un sábado por la noche. | L3 |
 | Recuperar (RC) | L1 | Hay copias en el NAS, pero en la misma red y sin pruebas de restauración. | L3 |
 
-## 3. Entregable 3 · Plan de medidas priorizado (CE d y e)
+## 3. Entregable 3 · Plan de medidas priorizado
 
 Cada medida sale de un riesgo del apartado 1 y, cuando la hay, de una evidencia del apartado 2. Proponemos 10 medidas (el mínimo para un equipo de dos es 6), y tres de ellas tratan el R8.
 
@@ -243,7 +243,7 @@ Para cada riesgo indicamos qué se reduce: la probabilidad de que ocurra o el im
 |---|---|---|---|---|
 | Aprobado por |  | Gerencia |  |  |
 
-## 4. Entregable 4 · Marco de referencia (CE f)
+## 4. Entregable 4 · Marco de referencia
 
 ### 4.1 Estándares elegidos
 
@@ -395,7 +395,7 @@ sudo ufw --force enable
 
 Anotad en REG-RED: fecha y hora, quién lo hizo, reglas aplicadas, resultado de la verificación y si hizo falta la marcha atrás.
 
-## 5. Entregable 5 · Protocolo de incidencias con matriz de escalado (CE f)
+## 5. Entregable 5 · Protocolo de incidencias con matriz de escalado
 
 El bar cambia el protocolo: hay actividad de jueves a domingo hasta las 23:00, con camareros de fin de semana y sin nadie de informática en la nave. El protocolo tiene que funcionar con quien esté detrás de la barra.
 
